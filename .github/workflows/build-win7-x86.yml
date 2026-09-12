@@ -1,0 +1,83 @@
+name: Build Windows 7 x86
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+    paths:
+      - '**.js'
+      - '**.cjs'
+      - '**.html'
+      - '**.css'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'assets/**'
+      - '.github/workflows/build-win7-x86.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-win32:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.4'
+          cache: npm
+      - name: Verify toolchain
+        shell: pwsh
+        run: |
+          node --version
+          npm --version
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Rebuild native SQLite for Electron 22 / Windows x86
+        run: npm run rebuild:native:win32
+      - name: Verify native SQLite module
+        shell: pwsh
+        run: |
+          $native = Get-ChildItem 'node_modules/better-sqlite3/build/Release' -Filter '*.node' -ErrorAction SilentlyContinue
+          if (-not $native) { throw 'better-sqlite3 native module was not produced.' }
+          $native | ForEach-Object { Write-Host "Native module: $($_.FullName)" }
+      - name: Syntax check
+        run: npm run check
+      - name: Build NSIS Windows x86
+        run: npm run build:win32
+      - name: Build Portable Windows x86
+        run: npm run build:portable:win32
+      - name: Verify artifacts
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          $setup = Get-ChildItem "dist-desktop/Hesabdari-Setup-$version-win32.exe" -ErrorAction SilentlyContinue
+          $portable = Get-ChildItem "dist-desktop/Hesabdari-Portable-$version-win32.exe" -ErrorAction SilentlyContinue
+          $asar = Test-Path 'dist-desktop/win-ia32-unpacked/resources/app.asar'
+          if (-not $setup) { throw 'NSIS installer was not produced.' }
+          if (-not $portable) { throw 'Portable executable was not produced.' }
+          if (-not $asar) { throw 'resources/app.asar was not produced.' }
+          Write-Host "NSIS: $($setup.FullName)"
+          Write-Host "Portable: $($portable.FullName)"
+          Write-Host 'ASAR: dist-desktop/win-ia32-unpacked/resources/app.asar'
+      - name: Upload final installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hesabdari-Setup-win32-x86
+          path: dist-desktop/Hesabdari-Setup-*-win32.exe
+          if-no-files-found: error
+      - name: Upload portable build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hesabdari-Portable-win32-x86
+          path: dist-desktop/Hesabdari-Portable-*-win32.exe
+          if-no-files-found: error
+      - name: Upload unpacked build and app.asar
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hesabdari-win32-x86-unpacked
+          path: dist-desktop/win-ia32-unpacked/**
+          if-no-files-found: error
