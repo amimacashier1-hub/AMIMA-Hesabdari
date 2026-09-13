@@ -3,7 +3,7 @@ name: Build Windows 7 x86
 on:
   workflow_dispatch:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, stage7-ui ]
     paths:
       - '**.js'
       - '**.cjs'
