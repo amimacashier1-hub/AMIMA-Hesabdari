@@ -1685,15 +1685,7 @@ ipcMain.handle('invoice:return', (_e, {invoiceId, items, method, note}) => {
 
 ipcMain.handle('invoice:payments', (_e, invoiceId) => salesCore.invoicePayments(invoiceId));
 
-ipcMain.handle('invoice:cancel', (_e, invoiceId) => {
-  const inv = rows("SELECT * FROM invoices WHERE id=? AND status='OPEN'",[invoiceId])[0];
-  if (!inv) throw new Error('فاکتور باز پیدا نشد');
-  return withTransaction(() => {
-    const now=new Date().toISOString(); db.run("UPDATE invoices SET status='CANCELLED',updated_at=? WHERE id=? AND status='OPEN'",[now,invoiceId]);
-    queueSync('invoice', invoiceId); auditLog('INVOICE_CANCEL','INVOICE',invoiceId,null,'INVOICE',invoiceId,now);
-    return invoiceDetail(invoiceId);
-  });
-});
+ipcMain.handle('invoice:cancel', (_e, invoiceId) => salesCore.invoiceCancel(invoiceId));
 
 function currentActor(){ return sessionUser ? {id:sessionUser.id,name:sessionUser.displayName} : {id:'system-migration',name:'سیستم مهاجرت'}; }
 function nextAccountingEntryNo(){

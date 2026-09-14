@@ -304,6 +304,37 @@ function createSalesCore(ctx) {
   });
   }
 
+  function invoiceCancel(invoiceId) {
+    const inv = ctx.rows(
+      "SELECT * FROM invoices WHERE id=? AND status='OPEN'",
+      [invoiceId]
+    );
+    if (!inv.length) throw new Error('فاکتور باز پیدا نشد');
+
+    return ctx.withTransaction(() => {
+      const now = new Date().toISOString();
+
+      ctx.db.run(
+        "UPDATE invoices SET status='CANCELLED',updated_at=? WHERE id=? AND status='OPEN'",
+        [now, invoiceId]
+      );
+
+      ctx.queueSync('invoice', invoiceId);
+
+      ctx.auditLog(
+        'INVOICE_CANCEL',
+        'INVOICE',
+        invoiceId,
+        null,
+        'INVOICE',
+        invoiceId,
+        now
+      );
+
+      return ctx.invoiceDetail(invoiceId);
+    });
+  }
+
   return Object.freeze({
     invoiceDetail,
     invoicePayments,
@@ -311,7 +342,8 @@ function createSalesCore(ctx) {
     invoiceAddItem,
     invoiceSetDiscount,
     invoiceRemoveItem,
-    invoicePay
+    invoicePay,
+    invoiceCancel
   });
 }
 
