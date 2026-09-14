@@ -1603,22 +1603,7 @@ ipcMain.handle('invoice:get', (_e,id) => salesCore.invoiceDetail(id));
 
 ipcMain.handle('invoice:add-item', (_e, payload) => salesCore.invoiceAddItem(payload));
 
-ipcMain.handle('invoice:remove-item', (_e,{invoiceId,itemId}) => {
-  const inv=rows("SELECT status FROM invoices WHERE id=?",[invoiceId])[0];
-  if(!inv || inv.status!=='OPEN') throw new Error('فاکتور باز پیدا نشد');
-  return withTransaction(()=>{
-    const oldItem = rows("SELECT * FROM invoice_items WHERE id=? AND invoice_id=?", [itemId,invoiceId])[0];
-    if (!oldItem) throw new Error('قلم فاکتور پیدا نشد');
-    const result=db.run("DELETE FROM invoice_items WHERE id=? AND invoice_id=?",[itemId,invoiceId]);
-    if(!result.changes) throw new Error('قلم فاکتور پیدا نشد');
-    if (oldItem.product_id) repriceInvoiceProduct(invoiceId, oldItem.product_id);
-    recalcInvoice(invoiceId);
-    queueSync('invoice_item', itemId, 'DELETE', oldItem);
-    queueSync('invoice', invoiceId);
-    auditLog('INVOICE_ITEM_REMOVE','INVOICE_ITEM',itemId,{invoiceId,productId:oldItem.product_id,quantity:oldItem.quantity},'INVOICE',invoiceId,new Date().toISOString());
-    return invoiceDetail(invoiceId);
-  });
-});
+ipcMain.handle('invoice:remove-item', (_e, payload) => salesCore.invoiceRemoveItem(payload));
 
 ipcMain.handle('invoice:set-discount', (_e, payload) => salesCore.invoiceSetDiscount(payload));
 

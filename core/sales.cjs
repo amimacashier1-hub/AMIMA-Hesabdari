@@ -177,11 +177,75 @@ function createSalesCore(ctx) {
     });
   }
 
+
+  function invoiceRemoveItem({ invoiceId, itemId }) {
+    const inv = ctx.rows(
+      "SELECT status FROM invoices WHERE id=?",
+      [invoiceId]
+    )[0];
+
+    if (!inv || inv.status !== 'OPEN') {
+      throw new Error('فاکتور باز پیدا نشد');
+    }
+
+    return ctx.withTransaction(() => {
+      const oldItem = ctx.rows(
+        "SELECT * FROM invoice_items WHERE id=? AND invoice_id=?",
+        [itemId, invoiceId]
+      )[0];
+
+      if (!oldItem) {
+        throw new Error('قلم فاکتور پیدا نشد');
+      }
+
+      const result = ctx.db.run(
+        "DELETE FROM invoice_items WHERE id=? AND invoice_id=?",
+        [itemId, invoiceId]
+      );
+
+      if (!result.changes) {
+        throw new Error('قلم فاکتور پیدا نشد');
+      }
+
+      if (oldItem.product_id) {
+        ctx.repriceInvoiceProduct(invoiceId, oldItem.product_id);
+      }
+
+      ctx.recalcInvoice(invoiceId);
+
+      ctx.queueSync(
+        'invoice_item',
+        itemId,
+        'DELETE',
+        oldItem
+      );
+
+      ctx.queueSync('invoice', invoiceId);
+
+      ctx.auditLog(
+        'INVOICE_ITEM_REMOVE',
+        'INVOICE_ITEM',
+        itemId,
+        {
+          invoiceId,
+          productId: oldItem.product_id,
+          quantity: oldItem.quantity
+        },
+        'INVOICE',
+        invoiceId,
+        new Date().toISOString()
+      );
+
+      return invoiceDetail(invoiceId);
+    });
+  }
+
   return Object.freeze({
     invoiceDetail,
     invoiceNew,
     invoiceAddItem,
-    invoiceSetDiscount
+    invoiceSetDiscount,
+    invoiceRemoveItem
   });
 }
 
