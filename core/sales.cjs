@@ -304,6 +304,50 @@ function createSalesCore(ctx) {
   });
   }
 
+  function invoiceSetCustomer(invoiceId, customerId) {
+    const inv = ctx.rows(
+      "SELECT status FROM invoices WHERE id=?",
+      [invoiceId]
+    )[0];
+
+    if (!inv || inv.status !== 'OPEN') {
+      throw new Error('فاکتور باز پیدا نشد');
+    }
+
+    if (
+      customerId &&
+      !ctx.rows(
+        "SELECT id FROM customers WHERE id=?",
+        [customerId]
+      )[0]
+    ) {
+      throw new Error('مشتری پیدا نشد');
+    }
+
+    return ctx.withTransaction(() => {
+      const now = new Date().toISOString();
+
+      ctx.db.run(
+        "UPDATE invoices SET customer_id=?,updated_at=? WHERE id=?",
+        [customerId || null, now, invoiceId]
+      );
+
+      ctx.queueSync('invoice', invoiceId);
+
+      ctx.auditLog(
+        'SET_CUSTOMER',
+        'INVOICE',
+        invoiceId,
+        {customerId: customerId || null},
+        'INVOICE',
+        invoiceId,
+        now
+      );
+
+      return ctx.invoiceDetail(invoiceId);
+    });
+  }
+
   function invoiceCancel(invoiceId) {
     const inv = ctx.rows(
       "SELECT * FROM invoices WHERE id=? AND status='OPEN'",
@@ -343,7 +387,8 @@ function createSalesCore(ctx) {
     invoiceSetDiscount,
     invoiceRemoveItem,
     invoicePay,
-    invoiceCancel
+    invoiceCancel,
+    invoiceSetCustomer
   });
 }
 
