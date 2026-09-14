@@ -21,8 +21,26 @@ function createSalesCore(ctx) {
     return { ...inv, items };
   }
 
+  function invoiceNew() {
+    return ctx.withTransaction(() => {
+      const now = new Date().toISOString();
+      const id = ctx.newId('inv');
+      const no = ctx.nextInvoiceNo();
+
+      ctx.db.run(
+        "INSERT INTO invoices(id,invoice_no,status,created_at,updated_at) VALUES(?,?,?,?,?)",
+        [id,no,'OPEN',now,now]
+      );
+
+      ctx.queueSync('invoice', id);
+
+      return invoiceDetail(id);
+    });
+  }
+
   return Object.freeze({
-    invoiceDetail
+    invoiceDetail,
+    invoiceNew
   });
 }
 

@@ -1593,14 +1593,7 @@ ipcMain.handle('products:tiers', (_e, productId) => rows(
 
 ipcMain.handle('invoices:list-open', () => rows("SELECT * FROM invoices WHERE status='OPEN' ORDER BY invoice_no"));
 
-ipcMain.handle('invoice:new', () => withTransaction(() => {
-  const now = new Date().toISOString();
-  const id = newId('inv');
-  const no = nextInvoiceNo();
-  db.run("INSERT INTO invoices(id,invoice_no,status,created_at,updated_at) VALUES(?,?,?,?,?)",[id,no,'OPEN',now,now]);
-  queueSync('invoice', id);
-  return invoiceDetail(id);
-}));
+ipcMain.handle('invoice:new', () => salesCore.invoiceNew());
 
 ipcMain.handle('invoice:get', (_e,id) => salesCore.invoiceDetail(id));
 
