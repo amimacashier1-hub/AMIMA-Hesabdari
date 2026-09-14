@@ -1683,7 +1683,7 @@ ipcMain.handle('invoice:return', (_e, {invoiceId, items, method, note}) => {
   });
 });
 
-ipcMain.handle('invoice:payments', (_e, invoiceId) => rows("SELECT * FROM payments WHERE invoice_id=? ORDER BY created_at",[invoiceId]));
+ipcMain.handle('invoice:payments', (_e, invoiceId) => salesCore.invoicePayments(invoiceId));
 
 ipcMain.handle('invoice:cancel', (_e, invoiceId) => {
   const inv = rows("SELECT * FROM invoices WHERE id=? AND status='OPEN'",[invoiceId])[0];

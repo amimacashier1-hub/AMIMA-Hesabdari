@@ -21,6 +21,13 @@ function createSalesCore(ctx) {
     return { ...inv, items };
   }
 
+  function invoicePayments(invoiceId) {
+    return ctx.rows(
+      "SELECT * FROM payments WHERE invoice_id=? ORDER BY created_at",
+      [invoiceId]
+    );
+  }
+
   function invoiceNew() {
     return ctx.withTransaction(() => {
       const now = new Date().toISOString();
@@ -299,6 +306,7 @@ function createSalesCore(ctx) {
 
   return Object.freeze({
     invoiceDetail,
+    invoicePayments,
     invoiceNew,
     invoiceAddItem,
     invoiceSetDiscount,
