@@ -9,6 +9,7 @@ const { createCoreContext } = require('./core/context.cjs');
 const { createDashboardAdapter } = require('./core/dashboard-adapter.cjs');
 const { createReportsCore } = require('./core/reports.cjs');
 const { createReportsAdapter } = require('./core/reports-adapter.cjs');
+const { createSalesCore } = require('./core/sales.cjs');
 
 let db = null;
 let NativeDatabase = null;
@@ -921,6 +922,7 @@ function withTransaction(work) {
 // فعلاً فقط Context ساخته می‌شود؛ Handlerهای فعلی دست‌نخورده‌اند.
 let dashboardAdapter = null;
 let reportsAdapter = null;
+let salesCore = null;
 let dashboardCore = null;
 
 function createBusinessCoreContext() {
@@ -1600,7 +1602,7 @@ ipcMain.handle('invoice:new', () => withTransaction(() => {
   return invoiceDetail(id);
 }));
 
-ipcMain.handle('invoice:get', (_e,id) => invoiceDetail(id));
+ipcMain.handle('invoice:get', (_e,id) => salesCore.invoiceDetail(id));
 
 ipcMain.handle('invoice:add-item', (_e,{invoiceId,productId,quantity,unitPrice,manualPrice}) => {
   const inv = rows("SELECT id,status FROM invoices WHERE id=?",[invoiceId])[0];
@@ -2116,6 +2118,7 @@ function createWindow() {
 
 app.whenReady().then(async()=>{ await initDatabase(); dashboardCore = createDashboardCore(createBusinessCoreContext()); dashboardAdapter = createDashboardAdapter(dashboardCore);
   const reportsCore = createReportsCore(createBusinessCoreContext());
+  salesCore = createSalesCore(createBusinessCoreContext());
   reportsAdapter = createReportsAdapter(reportsCore); await createAutomaticBackup(); startAutoBackupTimer(); createWindow(); }).catch(err=>{
   try {
     const logDir = app.getPath('userData');
