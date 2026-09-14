@@ -1860,6 +1860,7 @@ ipcMain.handle('customers:payment', (_e,{customerId,amount,method,note}) => {
       const reg=rows("SELECT * FROM cash_registers WHERE status='OPEN' ORDER BY opened_at DESC LIMIT 1")[0]; if(!reg) throw new Error('برای دریافت نقدی ابتدا صندوق را باز کنید');
       insertCashMovement({registerId:reg.id,type:'CUSTOMER_PAYMENT',amount:a,direction:'IN',category:'CUSTOMER_PAYMENT',note:`دریافت حساب مشتری ${c.name}`,referenceType:'CUSTOMER_PAYMENT',referenceId:paymentId,createdAt:now});
     }
+    postJournalOnce('CUSTOMER_PAYMENT','CUSTOMER_PAYMENT',`دریافت از مشتری ${c.name}`,[{accountCode:m==='CASH'?'CASH':'BANK',accountName:m==='CASH'?'صندوق نقدی':'بانک / کارتخوان',debit:a,credit:0},{accountCode:'AR',accountName:'حساب‌های دریافتنی مشتریان',debit:0,credit:a}],'CUSTOMER_PAYMENT',paymentId,now);
     return {paymentId,method:m,amount:a,balance:ledger.balance,customer:rows('SELECT * FROM customers WHERE id=?',[cid])[0]};
   });
 });
