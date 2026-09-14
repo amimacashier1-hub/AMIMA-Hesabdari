@@ -32,6 +32,12 @@ function createCoreContext(deps) {
     money: deps.money,
     newId: deps.newId,
     withTransaction: deps.withTransaction,
+    localDateKey: deps.localDateKey || (() => {
+      throw new Error('localDateKey dependency is required');
+    }),
+    localMonthKey: deps.localMonthKey || (() => {
+      throw new Error('localMonthKey dependency is required');
+    }),
 
     currentActor: deps.currentActor || (() => ({
       id: 'system-migration',
