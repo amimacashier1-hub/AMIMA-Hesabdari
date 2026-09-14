@@ -136,10 +136,52 @@ function createSalesCore(ctx) {
     });
   }
 
+  function invoiceSetDiscount({invoiceId, discount, discountPercent}) {
+    const inv = ctx.rows(
+      "SELECT status,subtotal FROM invoices WHERE id=?",
+      [invoiceId]
+    )[0];
+
+    if (!inv || inv.status !== 'OPEN') {
+      throw new Error('فاکتور باز پیدا نشد');
+    }
+
+    let value;
+
+    if (discountPercent !== undefined) {
+      const pct = Number(discountPercent);
+
+      if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+        throw new Error('درصد تخفیف باید بین صفر تا ۱۰۰ باشد');
+      }
+
+      value = ctx.money(Number(inv.subtotal || 0) * pct / 100);
+    } else {
+      value = ctx.assertFiniteNonNegative(discount, 'تخفیف');
+    }
+
+    if (value > Number(inv.subtotal)) {
+      throw new Error('تخفیف نمی‌تواند از جمع فاکتور بیشتر باشد');
+    }
+
+    return ctx.withTransaction(() => {
+      ctx.db.run(
+        "UPDATE invoices SET discount=? WHERE id=?",
+        [ctx.money(value), invoiceId]
+      );
+
+      ctx.recalcInvoice(invoiceId);
+      ctx.queueSync('invoice', invoiceId);
+
+      return invoiceDetail(invoiceId);
+    });
+  }
+
   return Object.freeze({
     invoiceDetail,
     invoiceNew,
-    invoiceAddItem
+    invoiceAddItem,
+    invoiceSetDiscount
   });
 }
 

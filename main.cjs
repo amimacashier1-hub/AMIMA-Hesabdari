@@ -941,7 +941,8 @@ function createBusinessCoreContext() {
     invoiceDetail,
     ledgerStock,
     repriceInvoiceProduct,
-    recalcInvoice
+    recalcInvoice,
+    assertFiniteNonNegative
   });
 }
 
@@ -1619,18 +1620,7 @@ ipcMain.handle('invoice:remove-item', (_e,{invoiceId,itemId}) => {
   });
 });
 
-ipcMain.handle('invoice:set-discount', (_e,{invoiceId,discount,discountPercent}) => {
-  const inv = rows("SELECT status,subtotal FROM invoices WHERE id=?",[invoiceId])[0];
-  if (!inv || inv.status !== 'OPEN') throw new Error('فاکتور باز پیدا نشد');
-  let value;
-  if (discountPercent !== undefined) {
-    const pct=Number(discountPercent);
-    if(!Number.isFinite(pct)||pct<0||pct>100) throw new Error('درصد تخفیف باید بین صفر تا ۱۰۰ باشد');
-    value=money(Number(inv.subtotal||0)*pct/100);
-  } else value=assertFiniteNonNegative(discount, 'تخفیف');
-  if (value > Number(inv.subtotal)) throw new Error('تخفیف نمی‌تواند از جمع فاکتور بیشتر باشد');
-  return withTransaction(()=>{ db.run("UPDATE invoices SET discount=? WHERE id=?",[money(value),invoiceId]); recalcInvoice(invoiceId); queueSync('invoice', invoiceId); return invoiceDetail(invoiceId); });
-});
+ipcMain.handle('invoice:set-discount', (_e, payload) => salesCore.invoiceSetDiscount(payload));
 
 function recalcInvoice(invoiceId) {
   const r = rows("SELECT COALESCE(SUM(amount),0) subtotal FROM invoice_items WHERE invoice_id=?",[invoiceId])[0];

@@ -50,7 +50,8 @@ function createCoreContext(deps) {
     invoiceDetail: deps.invoiceDetail || null,
     ledgerStock: deps.ledgerStock || null,
     repriceInvoiceProduct: deps.repriceInvoiceProduct || null,
-    recalcInvoice: deps.recalcInvoice || null
+    recalcInvoice: deps.recalcInvoice || null,
+    assertFiniteNonNegative: deps.assertFiniteNonNegative || null
   });
 }
 

@@ -16,6 +16,7 @@ function createSalesContext(deps) {
     'tierFor',
     'repriceInvoiceProduct',
     'recalcInvoice',
+    'assertFiniteNonNegative',
     'queueSync',
     'auditLog',
     'postJournal',
@@ -47,6 +48,7 @@ function createSalesContext(deps) {
     tierFor: deps.tierFor,
     repriceInvoiceProduct: deps.repriceInvoiceProduct,
     recalcInvoice: deps.recalcInvoice,
+    assertFiniteNonNegative: deps.assertFiniteNonNegative,
 
     queueSync: deps.queueSync,
     auditLog: deps.auditLog,
