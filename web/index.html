@@ -8,16 +8,78 @@
 </head>
 
 <body>
-  <div id="app">
-    <header>
-      <h1>آمیما</h1>
-      <span>صندوق عطاری</span>
+  <div class="app-shell">
+
+    <header class="topbar">
+      <div>
+        <h1>آمیما</h1>
+        <span>صندوق عطاری</span>
+      </div>
+      <div class="status">نسخه وب</div>
     </header>
 
-    <main>
-      <h2>Web Port</h2>
-      <p>اسکلت اولیه نسخه وب آمیما</p>
-    </main>
+    <div class="layout">
+
+      <aside class="sidebar">
+        <button class="nav-item active">داشبورد</button>
+        <button class="nav-item">فروش / صندوق</button>
+        <button class="nav-item">انبار</button>
+        <button class="nav-item">مشتریان</button>
+        <button class="nav-item">گزارش‌ها</button>
+        <button class="nav-item">تنظیمات</button>
+        <button class="nav-item">پشتیبان‌گیری</button>
+      </aside>
+
+      <main class="content">
+        <section class="page-header">
+          <div>
+            <h2>داشبورد</h2>
+            <p>مدیریت فروشگاه آمیما</p>
+          </div>
+        </section>
+
+        <section class="cards">
+          <div class="card">
+            <span>فروش امروز</span>
+            <strong>۰ تومان</strong>
+          </div>
+
+          <div class="card">
+            <span>تعداد فاکتور</span>
+            <strong>۰</strong>
+          </div>
+
+          <div class="card">
+            <span>موجودی کالا</span>
+            <strong>۰ قلم</strong>
+          </div>
+
+          <div class="card">
+            <span>حساب مشتریان</span>
+            <strong>۰ تومان</strong>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h3>دسترسی سریع</h3>
+
+          <div class="quick-actions">
+            <button>＋ فروش جدید</button>
+            <button>＋ کالای جدید</button>
+            <button>مشتریان</button>
+            <button>گزارش امروز</button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h3>وضعیت سیستم</h3>
+          <p class="muted">
+            این نسخه فعلاً فقط پوسته وب آمیماست و هنوز به دیتابیس یا API متصل نشده است.
+          </p>
+        </section>
+
+      </main>
+    </div>
   </div>
 </body>
 </html>
