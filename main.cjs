@@ -4,6 +4,8 @@ const fs = require('fs');
 const crypto = require('crypto');
 const https = require('https');
 const http = require('http');
+const { createDashboardCore } = require('./core/dashboard.cjs');
+const { createCoreContext } = require('./core/context.cjs');
 
 let db = null;
 let NativeDatabase = null;
@@ -909,6 +911,28 @@ function withTransaction(work) {
     try { db.run('ROLLBACK'); } catch (_) {}
     throw err;
   }
+}
+
+
+// Business Core context bootstrap.
+// فعلاً فقط Context ساخته می‌شود؛ Handlerهای فعلی دست‌نخورده‌اند.
+let dashboardCore = null;
+
+function createBusinessCoreContext() {
+  return createCoreContext({
+    db,
+    rows,
+    money,
+    newId,
+    withTransaction,
+    localDateKey,
+    localMonthKey,
+    currentActor,
+    auditLog,
+    queueSync,
+    insertCashMovement,
+    invoiceDetail
+  });
 }
 
 function tierFor(productId, qty) {
@@ -2117,7 +2141,7 @@ function createWindow() {
   win.loadFile(path.join(__dirname,'src','index.html'));
 }
 
-app.whenReady().then(async()=>{ await initDatabase(); await createAutomaticBackup(); startAutoBackupTimer(); createWindow(); }).catch(err=>{
+app.whenReady().then(async()=>{ await initDatabase(); dashboardCore = createDashboardCore(createBusinessCoreContext()); await createAutomaticBackup(); startAutoBackupTimer(); createWindow(); }).catch(err=>{
   try {
     const logDir = app.getPath('userData');
     fs.mkdirSync(logDir,{recursive:true});
