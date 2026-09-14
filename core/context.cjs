@@ -47,7 +47,10 @@ function createCoreContext(deps) {
     auditLog: deps.auditLog || (() => {}),
     queueSync: deps.queueSync || (() => {}),
     insertCashMovement: deps.insertCashMovement || null,
-    invoiceDetail: deps.invoiceDetail || null
+    invoiceDetail: deps.invoiceDetail || null,
+    ledgerStock: deps.ledgerStock || null,
+    repriceInvoiceProduct: deps.repriceInvoiceProduct || null,
+    recalcInvoice: deps.recalcInvoice || null
   });
 }
 

@@ -938,7 +938,10 @@ function createBusinessCoreContext() {
     auditLog,
     queueSync,
     insertCashMovement,
-    invoiceDetail
+    invoiceDetail,
+    ledgerStock,
+    repriceInvoiceProduct,
+    recalcInvoice
   });
 }
 
@@ -1597,38 +1600,7 @@ ipcMain.handle('invoice:new', () => salesCore.invoiceNew());
 
 ipcMain.handle('invoice:get', (_e,id) => salesCore.invoiceDetail(id));
 
-ipcMain.handle('invoice:add-item', (_e,{invoiceId,productId,quantity,unitPrice,manualPrice}) => {
-  const inv = rows("SELECT id,status FROM invoices WHERE id=?",[invoiceId])[0];
-  if (!inv || inv.status !== 'OPEN') throw new Error('فاکتور باز پیدا نشد');
-  const p = rows("SELECT * FROM products WHERE id=? AND active=1",[productId])[0];
-  if (!p) throw new Error('کالا پیدا نشد');
-  const qty = Number(quantity);
-  if (!(qty>0)) throw new Error('مقدار نامعتبر است');
-  const manual = !!manualPrice;
-  const requestedPrice = Number(unitPrice);
-  if (manual && (!Number.isFinite(requestedPrice) || requestedPrice < 0)) throw new Error('قیمت فروش نامعتبر است');
-  return withTransaction(() => {
-    const existingQty = rows("SELECT COALESCE(SUM(quantity),0) qty FROM invoice_items WHERE invoice_id=? AND product_id=?", [invoiceId,productId])[0];
-    const requestedTotal = Number(existingQty?.qty || 0) + qty;
-    if (requestedTotal > ledgerStock(productId)) throw new Error('موجودی کافی نیست');
-    const existingItem = rows("SELECT * FROM invoice_items WHERE invoice_id=? AND product_id=? LIMIT 1", [invoiceId,productId])[0];
-    if (existingItem) {
-      db.run("UPDATE invoice_items SET quantity=quantity+? WHERE id=?", [qty, existingItem.id]);
-      if (manual) {
-        const price = money(requestedPrice);
-        db.run("UPDATE invoice_items SET unit_price=?, amount=ROUND(quantity * ?,0), tier_order=-1 WHERE id=?", [price,price,existingItem.id]);
-      } else repriceInvoiceProduct(invoiceId, productId);
-    } else {
-      const price = manual ? money(requestedPrice) : money(p.sale_price_per_unit);
-      db.run(`INSERT INTO invoice_items(id,invoice_id,product_id,product_name,quantity,unit,unit_price,purchase_unit_price,amount,tier_order) VALUES(?,?,?,?,?,?,?,?,?,?)`,
-        [newId('item'),invoiceId,productId,p.name,qty,p.unit,price,p.purchase_price,money(qty*price),manual?-1:null]);
-      if (!manual) repriceInvoiceProduct(invoiceId, productId);
-    }
-    recalcInvoice(invoiceId);
-    queueSync('invoice', invoiceId);
-    return invoiceDetail(invoiceId);
-  });
-});
+ipcMain.handle('invoice:add-item', (_e, payload) => salesCore.invoiceAddItem(payload));
 
 ipcMain.handle('invoice:remove-item', (_e,{invoiceId,itemId}) => {
   const inv=rows("SELECT status FROM invoices WHERE id=?",[invoiceId])[0];
