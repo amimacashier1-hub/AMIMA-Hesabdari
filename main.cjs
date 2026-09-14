@@ -6,6 +6,7 @@ const https = require('https');
 const http = require('http');
 const { createDashboardCore } = require('./core/dashboard.cjs');
 const { createCoreContext } = require('./core/context.cjs');
+const { createDashboardAdapter } = require('./core/dashboard-adapter.cjs');
 
 let db = null;
 let NativeDatabase = null;
@@ -916,6 +917,7 @@ function withTransaction(work) {
 
 // Business Core context bootstrap.
 // فعلاً فقط Context ساخته می‌شود؛ Handlerهای فعلی دست‌نخورده‌اند.
+let dashboardAdapter = null;
 let dashboardCore = null;
 
 function createBusinessCoreContext() {
@@ -1240,22 +1242,7 @@ ipcMain.handle('sync:resolve', (_e,{id,resolution}) => {
   return withTransaction(()=>{ if(resolution==='KEEP_SERVER'){ applyServerChanges([{entity_type:c.entity_type,entity_id:c.entity_id,server_version:c.server_version,payload:c.server_payload_json?JSON.parse(c.server_payload_json):{},operation:'UPSERT'}]); } db.run("UPDATE sync_conflicts SET resolution=?,resolved_at=?,resolved_payload_json=? WHERE id=?",[resolution,new Date().toISOString(),resolution==='KEEP_LOCAL'?c.local_payload_json:c.server_payload_json,id]); return true; });
 });
 
-ipcMain.handle('app:get-dashboard', () => {
-  const today = localDateKey();
-  const salesToday = rows("SELECT COALESCE(SUM(total),0) total, COUNT(*) count FROM invoices WHERE status='PAID' AND date(closed_at,'localtime')=?", [today])[0];
-  const month = localMonthKey();
-  const salesMonth = rows("SELECT COALESCE(SUM(total),0) total FROM invoices WHERE status='PAID' AND strftime('%Y-%m',closed_at,'localtime')=?", [month])[0];
-  const best = rows(`
-    SELECT product_id, product_name, SUM(quantity) qty, SUM(amount) amount
-    FROM invoice_items ii JOIN invoices i ON i.id=ii.invoice_id
-    WHERE i.status='PAID' AND strftime('%Y-%m',i.closed_at,'localtime')=?
-    GROUP BY product_id, product_name ORDER BY qty DESC LIMIT 5
-  `,[month]);
-  const low = rows("SELECT * FROM products WHERE active=1 AND stock <= min_stock ORDER BY stock ASC LIMIT 8");
-  const open = rows("SELECT * FROM invoices WHERE status='OPEN' ORDER BY invoice_no");
-  return { salesToday, salesMonth, best, low, open };
-});
-
+ipcMain.handle('app:get-dashboard', () => dashboardAdapter.getSummary());
 ipcMain.handle('products:list', () => rows(`
   SELECT p.*, c.name category_name
   FROM products p LEFT JOIN categories c ON c.id=p.category_id
@@ -2141,7 +2128,7 @@ function createWindow() {
   win.loadFile(path.join(__dirname,'src','index.html'));
 }
 
-app.whenReady().then(async()=>{ await initDatabase(); dashboardCore = createDashboardCore(createBusinessCoreContext()); await createAutomaticBackup(); startAutoBackupTimer(); createWindow(); }).catch(err=>{
+app.whenReady().then(async()=>{ await initDatabase(); dashboardCore = createDashboardCore(createBusinessCoreContext()); dashboardAdapter = createDashboardAdapter(dashboardCore); await createAutomaticBackup(); startAutoBackupTimer(); createWindow(); }).catch(err=>{
   try {
     const logDir = app.getPath('userData');
     fs.mkdirSync(logDir,{recursive:true});
