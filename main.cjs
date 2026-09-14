@@ -639,6 +639,9 @@ function createSchema() {
   if (!stockCols.some(r => r[1] === 'unit_cost')) db.run("ALTER TABLE stock_movements ADD COLUMN unit_cost REAL NOT NULL DEFAULT 0");
   if (!stockCols.some(r => r[1] === 'total_cost')) db.run("ALTER TABLE stock_movements ADD COLUMN total_cost REAL NOT NULL DEFAULT 0");
   if (!stockCols.some(r => r[1] === 'cost_method')) db.run("ALTER TABLE stock_movements ADD COLUMN cost_method TEXT NOT NULL DEFAULT 'MOVING_AVERAGE'");
+  if (!stockCols.some(r => r[1] === 'source_type')) db.run("ALTER TABLE stock_movements ADD COLUMN source_type TEXT");
+  if (!stockCols.some(r => r[1] === 'source_id')) db.run("ALTER TABLE stock_movements ADD COLUMN source_id TEXT");
+  db.run("CREATE INDEX IF NOT EXISTS idx_stock_source ON stock_movements(source_type, source_id)");
 
   const cashMovementCols = db.exec("PRAGMA table_info(cash_movements)")[0]?.values || [];
   if (!cashMovementCols.some(r => r[1] === 'direction')) db.run("ALTER TABLE cash_movements ADD COLUMN direction TEXT NOT NULL DEFAULT 'OUT'");
@@ -1105,7 +1108,7 @@ function applyServerChanges(changes=[]) {
         if(!p) throw new Error(`کالای گردش ${productId} در صندوق پیدا نشد`);
         const delta=Number(payload.quantity||0);
         if(ledgerStock(productId)+delta<0) throw new Error(`اعمال گردش ${id} باعث منفی شدن موجودی می‌شود`);
-        db.run("INSERT INTO stock_movements(id,product_id,invoice_id,movement_type,quantity,unit_cost,total_cost,cost_method,created_at,note) VALUES(?,?,?,?,?,?,?,?,?,?)",[id,productId,payload.invoice_id||null,payload.movement_type,delta,Number(payload.unit_cost||0),Number(payload.total_cost||0),'SYNC_V3',payload.created_at||now,payload.note||null]);
+        db.run("INSERT INTO stock_movements(id,product_id,invoice_id,movement_type,quantity,unit_cost,total_cost,cost_method,created_at,note,source_type,source_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",[id,productId,payload.invoice_id||null,payload.movement_type,delta,Number(payload.unit_cost||0),Number(payload.total_cost||0),'SYNC_V3',payload.created_at||now,payload.note||null,payload.source_type||null,payload.source_id||null]);
         syncProductStockFromLedger(productId, now);
       }
     } else if(type==='category'){
@@ -1487,7 +1490,7 @@ ipcMain.handle('purchase:pay', (_e,{purchaseInvoiceId,payments}) => {
       const cost=Number(item.effective_unit_cost||0);
       if(!(cost>=0)) throw new Error('بهای تمام‌شده خرید نامعتبر است');
       const mid=newId('mov');
-      db.run("INSERT INTO stock_movements(id,product_id,invoice_id,movement_type,quantity,unit_cost,total_cost,cost_method,created_at,note) VALUES(?,?,?,?,?,?,?,?,?,?)",[mid,item.product_id,purchaseInvoiceId,'PURCHASE',Number(item.quantity),cost,money(Number(item.quantity)*cost),'PURCHASE_INVOICE',now,`خرید فاکتور ${fresh.purchase_no}`]);
+      db.run("INSERT INTO stock_movements(id,product_id,invoice_id,movement_type,quantity,unit_cost,total_cost,cost_method,created_at,note,source_type,source_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",[mid,item.product_id,null,'PURCHASE',Number(item.quantity),cost,money(Number(item.quantity)*cost),'PURCHASE_INVOICE',now,`خرید فاکتور ${fresh.purchase_no}`,'PURCHASE',purchaseInvoiceId]);
       syncProductStockFromLedger(item.product_id,now); queueSync('stock_movement',mid); queueSync('product',item.product_id);
       // Keep the current product price as the last purchase reference, not the stock valuation source.
       db.run("UPDATE products SET purchase_price=?,updated_at=? WHERE id=?",[cost,now,item.product_id]); queueSync('product',item.product_id);
