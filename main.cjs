@@ -413,6 +413,46 @@ function createSchema() {
     CREATE INDEX IF NOT EXISTS idx_supplier_ledger_supplier_date ON supplier_ledger(supplier_id, created_at, id);
     CREATE INDEX IF NOT EXISTS idx_supplier_ledger_reference ON supplier_ledger(reference_type, reference_id);
 
+    CREATE TABLE IF NOT EXISTS purchase_returns (
+      id TEXT PRIMARY KEY,
+      return_no INTEGER UNIQUE NOT NULL,
+      purchase_invoice_id TEXT NOT NULL,
+      supplier_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'COMPLETED',
+      subtotal REAL NOT NULL DEFAULT 0,
+      refund_total REAL NOT NULL DEFAULT 0,
+      refund_method TEXT NOT NULL,
+      note TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(purchase_invoice_id) REFERENCES purchase_invoices(id),
+      FOREIGN KEY(supplier_id) REFERENCES suppliers(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_purchase_returns_invoice
+      ON purchase_returns(purchase_invoice_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS purchase_return_items (
+      id TEXT PRIMARY KEY,
+      return_id TEXT NOT NULL,
+      purchase_item_id TEXT NOT NULL,
+      product_id TEXT NOT NULL,
+      product_name TEXT NOT NULL,
+      quantity REAL NOT NULL CHECK(quantity > 0),
+      unit TEXT NOT NULL,
+      unit_cost REAL NOT NULL DEFAULT 0,
+      refund_amount REAL NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(return_id) REFERENCES purchase_returns(id) ON DELETE CASCADE,
+      FOREIGN KEY(purchase_item_id) REFERENCES purchase_items(id),
+      FOREIGN KEY(product_id) REFERENCES products(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_purchase_return_items_return
+      ON purchase_return_items(return_id);
+
+    CREATE INDEX IF NOT EXISTS idx_purchase_return_items_purchase_item
+      ON purchase_return_items(purchase_item_id);
+
     CREATE TABLE IF NOT EXISTS purchase_invoices (
       id TEXT PRIMARY KEY,
       purchase_no INTEGER UNIQUE NOT NULL,
@@ -1381,6 +1421,11 @@ function nextPurchaseNo() {
   return next;
 }
 
+function nextPurchaseReturnNo(){
+  return Number(rows("SELECT COALESCE(MAX(return_no),0)+1 n FROM purchase_returns")[0]?.n || 1);
+}
+
+
 function purchaseDetail(id) {
   const invoice = rows(`SELECT pi.*, s.name supplier_name, s.phone supplier_phone
     FROM purchase_invoices pi JOIN suppliers s ON s.id=pi.supplier_id WHERE pi.id=?`, [id])[0];
@@ -1465,6 +1510,313 @@ ipcMain.handle('suppliers:payment', (_e,{supplierId,amount,method,note}) => {
     postJournalOnce('SUPPLIER_PAYMENT','SUPPLIER_PAYMENT',`پرداخت به تأمین‌کننده ${supplier.name}`,[{accountCode:'AP',accountName:'حساب‌های پرداختنی تأمین‌کنندگان',debit:a,credit:0,note:note||''},{accountCode:m==='CASH'?'CASH':'BANK',accountName:m==='CASH'?'صندوق نقدی':'بانک / کارتخوان',debit:0,credit:a,note:note||''}],'SUPPLIER_PAYMENT',pid,now);
     auditLog('SUPPLIER_PAYMENT','SUPPLIER',sid,{paymentId:pid,amount:a,method:m,balance:ledger.balance,note:note||''},'SUPPLIER_PAYMENT',pid,now);
     return {paymentId:pid,method:m,amount:a,balance:ledger.balance,supplier:rows('SELECT * FROM suppliers WHERE id=?',[sid])[0]};
+  });
+});
+
+
+function purchaseReturnDetail(id) {
+  const ret = rows(`SELECT pr.*, pi.purchase_no, s.name supplier_name
+    FROM purchase_returns pr
+    JOIN purchase_invoices pi ON pi.id=pr.purchase_invoice_id
+    JOIN suppliers s ON s.id=pr.supplier_id
+    WHERE pr.id=?`, [id])[0];
+  if (!ret) throw new Error('برگشت خرید پیدا نشد');
+
+  const items = rows(`SELECT * FROM purchase_return_items
+    WHERE return_id=? ORDER BY rowid`, [id]);
+
+  return {return:ret, items};
+}
+
+ipcMain.handle('purchase:returns', (_e, purchaseInvoiceId) => {
+  const id = String(purchaseInvoiceId || '');
+  if (!id) throw new Error('فاکتور خرید الزامی است');
+  return rows(`SELECT pr.*, pri.id item_return_id, pri.purchase_item_id,
+      pri.product_id, pri.product_name, pri.quantity, pri.unit,
+      pri.unit_cost, pri.refund_amount
+    FROM purchase_returns pr
+    JOIN purchase_return_items pri ON pri.return_id=pr.id
+    WHERE pr.purchase_invoice_id=?
+    ORDER BY pr.created_at DESC, pr.return_no DESC`, [id]);
+});
+
+ipcMain.handle('purchase:return', (_e, {purchaseInvoiceId, items, method, note}) => {
+  const invoiceId = String(purchaseInvoiceId || '');
+  if (!invoiceId) throw new Error('فاکتور خرید الزامی است');
+
+  const inv = rows(
+    "SELECT * FROM purchase_invoices WHERE id=? AND status='RECEIVED'",
+    [invoiceId]
+  )[0];
+  if (!inv) throw new Error('فاکتور خرید قابل برگشت پیدا نشد');
+
+  const cleanMap = new Map();
+  for (const x of (Array.isArray(items) ? items : [])) {
+    const itemId = String(x?.itemId || '');
+    const quantity = Number(x?.quantity);
+    if (!itemId || !(quantity > 0)) continue;
+    cleanMap.set(itemId, Number(cleanMap.get(itemId) || 0) + quantity);
+  }
+  const clean = Array.from(cleanMap.entries()).map(([itemId, quantity]) => ({
+    itemId,
+    quantity
+  }));
+
+  if (!clean.length) throw new Error('حداقل یک قلم برای برگشت انتخاب کنید');
+
+  const refundMethod = String(method || '').toUpperCase();
+  if (!['CASH','CARD','ACCOUNT'].includes(refundMethod)) {
+    throw new Error('روش تسویه برگشت خرید نامعتبر است');
+  }
+
+  return withTransaction(() => {
+    const now = new Date().toISOString();
+    const supplier = rows(
+      'SELECT * FROM suppliers WHERE id=?',
+      [inv.supplier_id]
+    )[0];
+    if (!supplier) throw new Error('تأمین‌کننده فاکتور پیدا نشد');
+
+    const normalized = [];
+    let total = 0;
+
+    for (const req of clean) {
+      const item = rows(
+        "SELECT * FROM purchase_items WHERE id=? AND purchase_invoice_id=?",
+        [req.itemId, invoiceId]
+      )[0];
+
+      if (!item) throw new Error('قلم فاکتور خرید پیدا نشد');
+
+      const returned = Number(rows(
+        "SELECT COALESCE(SUM(quantity),0) q FROM purchase_return_items WHERE purchase_item_id=?",
+        [item.id]
+      )[0]?.q || 0);
+
+      const originalQty = Number(item.quantity || 0);
+      const remaining = originalQty - returned;
+
+      if (req.quantity > remaining + 1e-9) {
+        throw new Error(`مقدار قابل برگشت ${item.product_name}: ${remaining} ${item.unit}`);
+      }
+
+      const unitCost = money(Number(item.effective_unit_cost || 0));
+      if (!(unitCost >= 0)) throw new Error('بهای تاریخی برگشت نامعتبر است');
+
+      const refund = money(req.quantity * unitCost);
+      if (refund <= 0) throw new Error('مبلغ برگشت نامعتبر است');
+
+      normalized.push({
+        item,
+        quantity: req.quantity,
+        unitCost,
+        refund
+      });
+
+      total = money(total + refund);
+    }
+
+    const requestedByProduct = new Map();
+    for (const x of normalized) {
+      const key = String(x.item.product_id);
+      requestedByProduct.set(
+        key,
+        Number(requestedByProduct.get(key) || 0) + Number(x.quantity || 0)
+      );
+    }
+
+    for (const [productId, requestedQty] of requestedByProduct.entries()) {
+      const stock = ledgerStock(productId);
+      if (requestedQty > stock + 1e-9) {
+        const product = rows(
+          'SELECT name, unit FROM products WHERE id=?',
+          [productId]
+        )[0];
+        throw new Error(
+          `موجودی ${product?.name || 'کالا'} برای این برگشت کافی نیست. موجودی: ${stock} ${product?.unit || ''}`
+        );
+      }
+    }
+
+    const supplierBalance = money(supplier.balance || 0);
+
+    if (supplierBalance > 1e-9 && refundMethod !== 'ACCOUNT') {
+      throw new Error(
+        `تأمین‌کننده ${money(supplierBalance)} تومان بدهی جاری دارد. برای این برگشت باید روش «حساب تأمین‌کننده» انتخاب شود.`
+      );
+    }
+
+    if (refundMethod === 'ACCOUNT' && total > supplierBalance + 1e-9) {
+      throw new Error(
+        `مبلغ برگشت بیشتر از بدهی فعلی تأمین‌کننده است. بدهی: ${money(supplierBalance)} تومان`
+      );
+    }
+
+    const returnId = newId('pret');
+    const returnNo = nextPurchaseReturnNo();
+
+    db.run(
+      `INSERT INTO purchase_returns
+       (id,return_no,purchase_invoice_id,supplier_id,status,subtotal,refund_total,refund_method,note,created_at)
+       VALUES(?,?,?,?,?,?,?,?,?,?)`,
+      [
+        returnId,
+        returnNo,
+        invoiceId,
+        inv.supplier_id,
+        'COMPLETED',
+        total,
+        total,
+        refundMethod,
+        String(note || '').trim(),
+        now
+      ]
+    );
+
+    for (const x of normalized) {
+      db.run(
+        `INSERT INTO purchase_return_items
+         (id,return_id,purchase_item_id,product_id,product_name,quantity,unit,unit_cost,refund_amount,created_at)
+         VALUES(?,?,?,?,?,?,?,?,?,?)`,
+        [
+          newId('preti'),
+          returnId,
+          x.item.id,
+          x.item.product_id,
+          x.item.product_name,
+          x.quantity,
+          x.item.unit,
+          x.unitCost,
+          x.refund,
+          now
+        ]
+      );
+
+      const movId = newId('mov');
+
+      db.run(
+        `INSERT INTO stock_movements
+         (id,product_id,invoice_id,movement_type,quantity,unit_cost,total_cost,cost_method,created_at,note,source_type,source_id)
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [
+          movId,
+          x.item.product_id,
+          null,
+          'PURCHASE_RETURN',
+          -x.quantity,
+          x.unitCost,
+          money(-x.quantity * x.unitCost),
+          'PURCHASE_RETURN_HISTORICAL_COST',
+          now,
+          `برگشت خرید فاکتور ${inv.purchase_no} / برگشت ${returnNo}`,
+          'PURCHASE_RETURN',
+          returnId
+        ]
+      );
+
+      syncProductStockFromLedger(x.item.product_id, now);
+      queueSync('stock_movement', movId);
+      queueSync('product', x.item.product_id);
+    }
+
+    if (refundMethod === 'ACCOUNT') {
+      postSupplierLedger(
+        inv.supplier_id,
+        'DEBIT',
+        total,
+        'PURCHASE_RETURN',
+        'PURCHASE_RETURN',
+        returnId,
+        `کسر برگشت خرید ${returnNo} از بدهی تأمین‌کننده`,
+        now
+      );
+    }
+
+    if (refundMethod === 'CASH') {
+      const reg = rows(
+        "SELECT id FROM cash_registers WHERE status='OPEN' ORDER BY opened_at DESC LIMIT 1"
+      )[0];
+
+      if (!reg) throw new Error('برای دریافت نقدی ابتدا صندوق را باز کنید');
+
+      insertCashMovement({
+        registerId: reg.id,
+        type: 'PURCHASE_RETURN_REFUND',
+        amount: total,
+        direction: 'IN',
+        category: 'PURCHASE',
+        note: `دریافت وجه برگشت خرید ${returnNo} / فاکتور ${inv.purchase_no}`,
+        referenceType: 'PURCHASE_RETURN',
+        referenceId: returnId,
+        createdAt: now
+      });
+    }
+
+    const lines = [
+      {
+        accountCode: refundMethod === 'ACCOUNT' ? 'AP' : (refundMethod === 'CASH' ? 'CASH' : 'BANK'),
+        accountName: refundMethod === 'ACCOUNT' ? 'حساب‌های پرداختنی تأمین‌کنندگان' : (refundMethod === 'CASH' ? 'صندوق نقدی' : 'بانک / کارتخوان'),
+        debit: total,
+        credit: 0,
+        note: `برگشت خرید ${returnNo}`
+      },
+      {
+        accountCode: 'INVENTORY',
+        accountName: 'موجودی کالا',
+        debit: 0,
+        credit: total,
+        note: `برگشت خرید ${returnNo}`
+      }
+    ];
+
+    postJournalOnce(
+      'PURCHASE_RETURN',
+      'PURCHASE_RETURN',
+      `برگشت خرید فاکتور ${inv.purchase_no} - شماره ${returnNo}`,
+      lines,
+      'PURCHASE_RETURN',
+      returnId,
+      now
+    );
+
+    queueSync('purchase_return', returnId);
+
+    auditLog(
+      'PURCHASE_RETURN',
+      'PURCHASE_RETURN',
+      returnId,
+      {
+        returnNo,
+        purchaseInvoiceId: invoiceId,
+        supplierId: inv.supplier_id,
+        amount: total,
+        method: refundMethod,
+        items: normalized.map(x => ({
+          purchaseItemId: x.item.id,
+          productId: x.item.product_id,
+          quantity: x.quantity,
+          unitCost: x.unitCost,
+          refundAmount: x.refund
+        }))
+      },
+      'PURCHASE_INVOICE',
+      invoiceId,
+      now
+    );
+
+    return {
+      returnId,
+      returnNo,
+      purchaseInvoiceId: invoiceId,
+      supplierId: inv.supplier_id,
+      refundTotal: total,
+      method: refundMethod,
+      items: normalized.map(x => ({
+        itemId: x.item.id,
+        quantity: x.quantity,
+        refundAmount: x.refund
+      }))
+    };
   });
 });
 
