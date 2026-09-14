@@ -31,7 +31,77 @@ e html>
   </div>
   <div id="purchaseEditor" class="card hidden"></div>
 </section>
-<section id="page-inventory" class="page hidden"><div class="page-head"><div><div class="eyebrow">گردش موجودی</div><h1>انبار</h1><p>تعریف، جستجو، قیمت‌گذاری و گردش موجودی کالا</p></div></div><div class="card"><div class="page-head" style="margin-bottom:12px"><div><div class="eyebrow">مدیریت کالا</div><h2>تعریف و مدیریت کالا</h2><p>تعریف، جستجو، ویرایش، آرشیو و قیمت‌گذاری کالا</p></div><div class="payrow"><button onclick="openBulkReprice()">٪ تغییر گروهی قیمت</button><button class="primary" onclick="openProductForm()">+ کالای جدید</button></div></div><div class="toolbar"><input id="productSearch" placeholder="جستجوی نام کالا..." oninput="renderProducts()"><span class="toolbar-note">واحد کالا می‌تواند گرم یا عدد باشد</span></div><div id="productsTable" class="table-wrap"></div></div><div class="card"><div class="card-title"><div><h2>تاریخچه تغییر قیمت</h2><p>تغییرات گروهی اخیر؛ فاکتورهای قبلی تحت تأثیر قرار نمی‌گیرند.</p></div><button onclick="loadPriceHistory()">بازخوانی</button></div><div id="priceHistoryTable" class="table-wrap"></div></div><div class="grid2"><div class="card"><div class="card-title"><div><h2>ثبت عملیات انبار</h2><p>موجودی فقط از این مسیر تغییر می‌کند.</p></div></div><div class="formgrid"><label>کالا<select id="stockProduct" onchange="loadStockMovements()"></select></label><label>نوع عملیات<select id="stockType"><option value="PURCHASE">خرید / ورود</option><option value="RETURN_IN">برگشت از فروش</option><option value="ADJUST_IN">اصلاح افزایشی</option><option value="ADJUST_OUT">اصلاح کاهشی</option><option value="WASTE">ضایعات / خروج</option></select></label><label>مقدار<input id="stockQty" type="number" min="0.1" step="0.1" placeholder="مثلاً 500"></label><label>توضیح<input id="stockNote" placeholder="علت یا شماره رسید"></label></div><div id="stockCurrent" class="tier-hint">یک کالا انتخاب کنید.</div><button class="primary" onclick="adjustStock()">ثبت گردش انبار</button></div><div class="card"><div class="card-title"><div><h2>گردش انتخاب‌شده</h2><p>آخرین ۲۰۰ گردش کالا</p></div></div><div id="stockMovements" class="table-wrap"></div></div></div></section>
+<section id="page-inventory" class="page hidden"><div class="page-head"><div><div class="eyebrow">گردش موجودی</div><h1>انبار</h1><p>تعریف، جستجو، قیمت‌گذاری و گردش موجودی کالا</p></div></div><div class="card"><div class="page-head" style="margin-bottom:12px"><div><div class="eyebrow">مدیریت کالا</div><h2>تعریف و مدیریت کالا</h2><p>تعریف، جستجو، ویرایش، آرشیو و قیمت‌گذاری کالا</p></div><div class="payrow"><button onclick="openBulkReprice()">٪ تغییر گروهی قیمت</button><button class="primary" onclick="openProductForm()">+ کالای جدید</button></div></div><div class="toolbar"><input id="productSearch" placeholder="جستجوی نام کالا..." oninput="renderProducts()"><span class="toolbar-note">واحد کالا می‌تواند گرم یا عدد باشد</span></div><div id="productsTable" class="table-wrap"></div></div>
+<div class="card">
+  <div class="card-title">
+    <div>
+      <div class="eyebrow">برگشت به تأمین‌کننده</div>
+      <h2>برگشت خرید</h2>
+      <p>از فاکتورهای خرید ثبت‌شده، کالا را به تأمین‌کننده برگردانید.</p>
+    </div>
+    <button onclick="loadPurchaseReturnPanel()">بازخوانی</button>
+  </div>
+
+  <div class="formgrid">
+    <label>
+      فاکتور خرید
+      <select id="purchaseReturnInvoice" onchange="loadPurchaseReturnInvoice()">
+        <option value="">در حال بارگذاری...</option>
+      </select>
+    </label>
+
+    <label>
+      تأمین‌کننده
+      <input id="purchaseReturnSupplier" readonly placeholder="—">
+    </label>
+
+    <label>
+      روش تسویه
+      <select id="purchaseReturnMethod" onchange="calcPurchaseReturnTotal()">
+        <option value="ACCOUNT">کسر از بدهی تأمین‌کننده</option>
+        <option value="CASH">دریافت نقدی</option>
+        <option value="CARD">دریافت از کارت / بانک</option>
+      </select>
+    </label>
+
+    <label>
+      توضیح
+      <input id="purchaseReturnNote" placeholder="مثلاً برگشت کالای معیوب">
+    </label>
+  </div>
+
+  <div id="purchaseReturnItems" class="table-wrap">
+    <p class="empty">ابتدا یک فاکتور خرید انتخاب کنید.</p>
+  </div>
+
+  <div class="payrow" style="justify-content:space-between;margin-top:12px">
+    <div id="purchaseReturnHint" class="tier-hint">
+      فاکتور خرید را انتخاب کنید.
+    </div>
+    <div>
+      <b>مبلغ برگشت: </b>
+      <strong id="purchaseReturnTotal">۰</strong>
+      <span> تومان</span>
+    </div>
+  </div>
+
+  <button class="primary" onclick="submitPurchaseReturn()" style="margin-top:12px">
+    ثبت برگشت خرید
+  </button>
+
+  <div style="margin-top:18px">
+    <div class="card-title">
+      <div>
+        <h3>سوابق برگشت این فاکتور</h3>
+        <p>برگشت‌های قبلی فاکتور انتخاب‌شده</p>
+      </div>
+    </div>
+    <div id="purchaseReturnHistory" class="table-wrap">
+      <p class="empty">فاکتوری انتخاب نشده است.</p>
+    </div>
+  </div>
+</div>
+<div class="card"><div class="card-title"><div><h2>تاریخچه تغییر قیمت</h2><p>تغییرات گروهی اخیر؛ فاکتورهای قبلی تحت تأثیر قرار نمی‌گیرند.</p></div><button onclick="loadPriceHistory()">بازخوانی</button></div><div id="priceHistoryTable" class="table-wrap"></div></div><div class="grid2"><div class="card"><div class="card-title"><div><h2>ثبت عملیات انبار</h2><p>موجودی فقط از این مسیر تغییر می‌کند.</p></div></div><div class="formgrid"><label>کالا<select id="stockProduct" onchange="loadStockMovements()"></select></label><label>نوع عملیات<select id="stockType"><option value="PURCHASE">خرید / ورود</option><option value="RETURN_IN">برگشت از فروش</option><option value="ADJUST_IN">اصلاح افزایشی</option><option value="ADJUST_OUT">اصلاح کاهشی</option><option value="WASTE">ضایعات / خروج</option></select></label><label>مقدار<input id="stockQty" type="number" min="0.1" step="0.1" placeholder="مثلاً 500"></label><label>توضیح<input id="stockNote" placeholder="علت یا شماره رسید"></label></div><div id="stockCurrent" class="tier-hint">یک کالا انتخاب کنید.</div><button class="primary" onclick="adjustStock()">ثبت گردش انبار</button></div><div class="card"><div class="card-title"><div><h2>گردش انتخاب‌شده</h2><p>آخرین ۲۰۰ گردش کالا</p></div></div><div id="stockMovements" class="table-wrap"></div></div></div></section>
 <section id="page-cash" class="page hidden"><div class="page-head"><div><div class="eyebrow">کنترل عملیات روزانه</div><h1>کنترل صندوق</h1><p>باز و بسته کردن شیفت، ورود و خروج وجه و مغایرت‌گیری</p></div></div><div class="stats"><div class="stat"><span>وضعیت صندوق</span><strong id="cashStatus">بسته</strong></div><div class="stat"><span>موجودی مورد انتظار</span><strong id="cashExpected">۰</strong><em>تومان</em></div></div><div class="grid2"><div class="card"><div class="card-title"><div><h2>عملیات صندوق</h2><p>ثبت وجه اولیه یا گردش نقدی</p></div></div><div class="formgrid"><label>مبلغ<input id="cashAmount" type="number" min="0" step="1000"></label><label>توضیح<input id="cashNote" placeholder="مثلاً خرید هزینه روزانه"></label><label>نوع خروج/ورود<select id="cashCategory"><option value="GENERAL">گردش عادی</option><option value="EXPENSE">هزینه</option><option value="OWNER_WITHDRAWAL">برداشت مالک</option></select></label></div><div class="payrow"><button onclick="openCash()">باز کردن صندوق</button><button onclick="cashMove('IN')">ورود وجه</button><button onclick="cashMove('OUT')">خروج وجه</button><button class="primary" onclick="closeCash()">بستن و تسویه شیفت</button></div><div id="cashCloseResult" class="tier-hint"></div></div><div class="card"><div class="card-title"><div><h2>راهنمای کنترل</h2><p>فروش نقدی فقط با صندوق باز ثبت می‌شود.</p></div></div><div id="cashInfo" class="tier-hint">صندوق بسته است.</div></div></div></section>
 <section class="card" style="margin:16px 0"><div class="card-title"><div><h2>گردش صندوق</h2><p>فروش نقدی، دریافت مشتری، مرجوعی، هزینه، برداشت مالک و مغایرت</p></div></div><div id="cashHistory" class="table-wrap"></div></section>
 

@@ -138,7 +138,322 @@ async function saveCustomerPayment(id){try{const r=await window.hesabdari.custom
 async function settleCustomer(id){const method=String(prompt('روش تسویه کامل: CASH / CARD','CASH')||'').toUpperCase();if(!['CASH','CARD'].includes(method))return toast('روش تسویه نامعتبر است');try{const r=await window.hesabdari.customers.settle({customerId:id,method,note:'تسویه کامل'});await loadCustomers();await showCustomerAccount(id);toast(`تسویه ${fmt(r.amount)} تومان انجام شد`)}catch(e){toast(e.message)}}
 
 function closeModal(){$('modal').classList.add('hidden')}
-async function loadInventory(){products=await window.hesabdari.products.list();const sel=$('stockProduct');sel.innerHTML=products.map(x=>`<option value="${x.id}">${esc(x.name)} — ${fmt(x.stock)} ${esc(x.unit)}</option>`).join('')||'<option value="">کالایی وجود ندارد</option>';await loadStockMovements()}
+
+let purchaseReturnInvoices = [];
+let purchaseReturnInvoice = null;
+let purchaseReturnHistory = [];
+
+async function loadPurchaseReturnPanel(){
+  try{
+    purchaseReturnInvoices = await window.hesabdari.purchase.listReceived();
+    const sel = $('purchaseReturnInvoice');
+
+    if(!purchaseReturnInvoices.length){
+      sel.innerHTML = '<option value="">فاکتور خرید ثبت‌شده‌ای وجود ندارد</option>';
+      purchaseReturnInvoice = null;
+      $('purchaseReturnSupplier').value = '';
+      $('purchaseReturnItems').innerHTML = '<p class="empty">فاکتور خرید ثبت‌شده‌ای برای برگشت وجود ندارد.</p>';
+      $('purchaseReturnHistory').innerHTML = '<p class="empty">سابقه‌ای وجود ندارد.</p>';
+      $('purchaseReturnTotal').textContent = '۰';
+      $('purchaseReturnHint').textContent = 'ابتدا یک فاکتور خرید ثبت و نهایی کنید.';
+      return;
+    }
+
+    sel.innerHTML =
+      '<option value="">انتخاب فاکتور خرید...</option>' +
+      purchaseReturnInvoices.map(x =>
+        `<option value="${esc(x.id)}">فاکتور ${fmt(x.purchase_no)} — ${esc(x.supplier_name)} — ${fmt(x.total)} تومان</option>`
+      ).join('');
+
+    await loadPurchaseReturnInvoice();
+  }catch(e){
+    toast(e.message);
+  }
+}
+
+async function loadPurchaseReturnInvoice(){
+  const id = $('purchaseReturnInvoice')?.value;
+
+  if(!id){
+    purchaseReturnInvoice = null;
+    $('purchaseReturnSupplier').value = '';
+    $('purchaseReturnItems').innerHTML = '<p class="empty">ابتدا یک فاکتور خرید انتخاب کنید.</p>';
+    $('purchaseReturnHistory').innerHTML = '<p class="empty">فاکتوری انتخاب نشده است.</p>';
+    $('purchaseReturnTotal').textContent = '۰';
+    $('purchaseReturnHint').textContent = 'فاکتور خرید را انتخاب کنید.';
+    return;
+  }
+
+  try{
+    purchaseReturnInvoice = await window.hesabdari.purchase.get(id);
+
+    const inv = purchaseReturnInvoice.invoice || {};
+    const supplierList = await window.hesabdari.suppliers.list();
+    const supplier = supplierList.find(x => String(x.id) === String(inv.supplier_id));
+
+    const supplierBalance = Number(supplier?.balance || 0);
+    $('purchaseReturnSupplier').value =
+      supplier ? `${supplier.name}${supplierBalance > 0 ? ` — بدهی: ${fmt(supplierBalance)} تومان` : ''}` : '—';
+    $('purchaseReturnSupplier').dataset.balance = String(supplierBalance);
+
+    purchaseReturnHistory =
+      await window.hesabdari.purchase.returns(id);
+
+    renderPurchaseReturnItems();
+    renderPurchaseReturnHistory();
+    calcPurchaseReturnTotal();
+  }catch(e){
+    toast(e.message);
+  }
+}
+
+function purchaseReturnAlreadyReturned(itemId){
+  return purchaseReturnHistory
+    .filter(x => String(x.purchase_item_id) === String(itemId))
+    .reduce((sum,x) => sum + Number(x.quantity || 0), 0);
+}
+
+function renderPurchaseReturnItems(){
+  const inv = purchaseReturnInvoice?.invoice || {};
+  const items = purchaseReturnInvoice?.items || [];
+
+  if(!items.length){
+    $('purchaseReturnItems').innerHTML =
+      '<p class="empty">این فاکتور کالایی ندارد.</p>';
+    return;
+  }
+
+  const rows = items.map((item,index)=>{
+    const returned = purchaseReturnAlreadyReturned(item.id);
+    const original = Number(item.quantity || 0);
+    const remaining = Math.max(0, original - returned);
+    const unitCost = Number(
+      item.effective_unit_cost ??
+      item.purchase_unit_price ??
+      0
+    );
+
+    return `
+      <tr>
+        <td>${index + 1}</td>
+        <td><b>${esc(item.product_name)}</b></td>
+        <td>${fmt(original)} ${esc(item.unit)}</td>
+        <td>${fmt(returned)} ${esc(item.unit)}</td>
+        <td>${fmt(remaining)} ${esc(item.unit)}</td>
+        <td>${fmt(unitCost)} تومان</td>
+        <td>
+          <input
+            class="purchase-return-qty"
+            data-item-id="${esc(item.id)}"
+            data-max="${remaining}"
+            data-unit-cost="${unitCost}"
+            type="number"
+            min="0"
+            max="${remaining}"
+            step="0.001"
+            value="0"
+            ${remaining <= 0 ? 'disabled' : ''}
+            oninput="calcPurchaseReturnTotal()"
+          >
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  $('purchaseReturnItems').innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>کالا</th>
+          <th>خرید</th>
+          <th>برگشت قبلی</th>
+          <th>قابل برگشت</th>
+          <th>بهای واحد</th>
+          <th>مقدار برگشت</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+function calcPurchaseReturnTotal(){
+  let total = 0;
+
+  document.querySelectorAll('.purchase-return-qty').forEach(input=>{
+    const max = Number(input.dataset.max || 0);
+    let qty = Number(input.value || 0);
+
+    if(qty < 0) qty = 0;
+    if(qty > max) qty = max;
+
+    if(Number(input.value || 0) !== qty){
+      input.value = qty;
+    }
+
+    total += qty * Number(input.dataset.unitCost || 0);
+  });
+
+  total = Math.round(total);
+
+  $('purchaseReturnTotal').textContent = fmt(total);
+
+  if(!purchaseReturnInvoice){
+    $('purchaseReturnHint').textContent =
+      'فاکتور خرید را انتخاب کنید.';
+    return total;
+  }
+
+  const method = $('purchaseReturnMethod').value;
+  const supplierId = purchaseReturnInvoice?.invoice?.supplier_id;
+  const supplierBalance = Number(
+    $('purchaseReturnSupplier')?.dataset?.balance || 0
+  );
+
+  if(method === 'ACCOUNT'){
+    if(supplierBalance > 0){
+      $('purchaseReturnHint').textContent =
+        `بدهی فعلی تأمین‌کننده: ${fmt(supplierBalance)} تومان`;
+    }else{
+      $('purchaseReturnHint').textContent =
+        'برای کسر از بدهی، تأمین‌کننده باید بدهی قابل تسویه داشته باشد.';
+    }
+  }else if(method === 'CASH'){
+    $('purchaseReturnHint').textContent =
+      'دریافت نقدی از صندوق انجام می‌شود؛ صندوق باید باز باشد.';
+  }else{
+    $('purchaseReturnHint').textContent =
+      'مبلغ برگشت به عنوان دریافت بانکی / کارت ثبت می‌شود.';
+  }
+
+  return total;
+}
+
+async function submitPurchaseReturn(){
+  if(!purchaseReturnInvoice){
+    return toast('ابتدا فاکتور خرید را انتخاب کنید');
+  }
+
+  const items = [];
+
+  document.querySelectorAll('.purchase-return-qty').forEach(input=>{
+    const qty = Number(input.value || 0);
+
+    if(qty > 0){
+      items.push({
+        itemId: input.dataset.itemId,
+        quantity: qty
+      });
+    }
+  });
+
+  if(!items.length){
+    return toast('حداقل مقدار برگشت یک کالا را وارد کنید');
+  }
+
+  const total = calcPurchaseReturnTotal();
+  if(total <= 0){
+    return toast('مبلغ برگشت معتبر نیست');
+  }
+
+  const method = String(
+    $('purchaseReturnMethod').value || ''
+  ).toUpperCase();
+
+  const note = $('purchaseReturnNote').value.trim();
+
+  if(!confirm(
+    `مبلغ برگشت ${fmt(total)} تومان است.\nآیا ثبت برگشت خرید انجام شود؟`
+  )){
+    return;
+  }
+
+  try{
+    const result = await window.hesabdari.purchase.return({
+      purchaseInvoiceId: purchaseReturnInvoice.invoice.id,
+      items,
+      method,
+      note
+    });
+
+    $('purchaseReturnNote').value = '';
+
+    toast(
+      `برگشت خرید شماره ${fmt(result.returnNo)} با مبلغ ${fmt(result.refundTotal)} تومان ثبت شد`
+    );
+
+    await loadPurchaseReturnPanel();
+    await loadInventory();
+
+  }catch(e){
+    toast(e.message);
+  }
+}
+
+function renderPurchaseReturnHistory(){
+  const list = purchaseReturnHistory || [];
+
+  if(!list.length){
+    $('purchaseReturnHistory').innerHTML =
+      '<p class="empty">برای این فاکتور هنوز برگشتی ثبت نشده است.</p>';
+    return;
+  }
+
+  const grouped = {};
+
+  list.forEach(x=>{
+    const key = String(x.id);
+
+    if(!grouped[key]){
+      grouped[key] = {
+        return_no: x.return_no,
+        created_at: x.created_at,
+        refund_total: x.refund_total,
+        refund_method: x.refund_method,
+        items: []
+      };
+    }
+
+    grouped[key].items.push(x);
+  });
+
+  $('purchaseReturnHistory').innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>شماره</th>
+          <th>تاریخ</th>
+          <th>کالا</th>
+          <th>مقدار</th>
+          <th>مبلغ</th>
+          <th>روش تسویه</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${Object.values(grouped).map(r=>r.items.map((item,index)=>`
+          <tr>
+            ${index === 0 ? `
+              <td rowspan="${r.items.length}">${fmt(r.return_no)}</td>
+              <td rowspan="${r.items.length}">${new Date(r.created_at).toLocaleString('fa-IR')}</td>
+            ` : ''}
+            <td>${esc(item.product_name)}</td>
+            <td>${fmt(item.quantity)} ${esc(item.unit)}</td>
+            <td>${fmt(item.refund_amount)} تومان</td>
+            ${index === 0 ? `
+              <td rowspan="${r.items.length}">
+                ${r.refund_method === 'ACCOUNT' ? 'کسر از بدهی' :
+                  r.refund_method === 'CASH' ? 'نقدی' : 'کارت / بانک'}
+              </td>
+            ` : ''}
+          </tr>
+        `).join('')).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+async function loadInventory(){products=await window.hesabdari.products.list();const sel=$('stockProduct');sel.innerHTML=products.map(x=>`<option value="${x.id}">${esc(x.name)} — ${fmt(x.stock)} ${esc(x.unit)}</option>`).join('')||'<option value="">کالایی وجود ندارد</option>';await loadStockMovements();await loadPurchaseReturnPanel()}
 async function loadStockMovements(){const id=$('stockProduct')?.value;if(!id)return;$('stockCurrent').textContent='در حال بارگذاری...';const p=products.find(x=>x.id===id);if(p)$('stockCurrent').innerHTML=`موجودی فعلی: <b>${fmt(p.stock)} ${esc(p.unit)}</b> · حداقل: ${fmt(p.min_stock)} ${esc(p.unit)}`;const list=await window.hesabdari.stock.movements(id);$('stockMovements').innerHTML=list.map(x=>`<tr><td>${new Date(x.created_at).toLocaleString('fa-IR')}</td><td>${esc(x.movement_type)}</td><td>${fmt(x.quantity)} ${esc(x.unit)}</td><td>${esc(x.note||'-')}</td></tr>`).length?`<table><thead><tr><th>زمان</th><th>نوع</th><th>مقدار</th><th>توضیح</th></tr></thead><tbody>${list.map(x=>`<tr><td>${new Date(x.created_at).toLocaleString('fa-IR')}</td><td>${esc(x.movement_type)}</td><td class="${Number(x.quantity)<0?'low':''}">${fmt(x.quantity)} ${esc(x.unit)}</td><td>${esc(x.note||'-')}</td></tr>`).join('')}</tbody></table>`:'<p class="empty">گردشی ثبت نشده است.</p>'}
 async function adjustStock(){const productId=$('stockProduct').value;const quantity=Number($('stockQty').value);const movementType=$('stockType').value;const note=$('stockNote').value.trim();try{await window.hesabdari.stock.adjust({productId,quantity,movementType,note});$('stockQty').value='';$('stockNote').value='';await loadInventory();toast('گردش انبار ثبت شد')}catch(e){toast(e.message)}}
 async function returnInvoice(id){
