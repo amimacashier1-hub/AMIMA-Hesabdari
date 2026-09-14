@@ -939,10 +939,18 @@ function createBusinessCoreContext() {
     queueSync,
     insertCashMovement,
     invoiceDetail,
+    nextInvoiceNo,
     ledgerStock,
+    movingAverageCost,
+    movementCost,
+    syncProductStockFromLedger,
+    tierFor,
     repriceInvoiceProduct,
     recalcInvoice,
-    assertFiniteNonNegative
+    assertFiniteNonNegative,
+    postCustomerLedger,
+    postJournal,
+    postJournalOnce
   });
 }
 
@@ -1616,61 +1624,7 @@ function recalcInvoice(invoiceId) {
     [subtotal,subtotal-discount,new Date().toISOString(),invoiceId]);
 }
 
-ipcMain.handle('invoice:pay', (_e,{invoiceId,payments,method}) => {
-  const inv = rows("SELECT * FROM invoices WHERE id=? AND status='OPEN'",[invoiceId])[0];
-  if (!inv) throw new Error('فاکتور باز پیدا نشد');
-  const items = rows("SELECT * FROM invoice_items WHERE invoice_id=?",[invoiceId]);
-  if (!items.length) throw new Error('فاکتور خالی است');
-  const list = Array.isArray(payments) ? payments : [{method,amount:inv.total}];
-  const normalized = list.map(x => ({method:String(x.method||'').toUpperCase(), amount:money(assertFiniteNonNegative(x.amount,'مبلغ پرداخت'))})).filter(x=>x.amount>0);
-  const allowed = new Set(['CASH','CARD','ACCOUNT']);
-  if (!normalized.length || normalized.some(x=>!allowed.has(x.method))) throw new Error('روش پرداخت نامعتبر است');
-  const paidTotal = normalized.reduce((a,x)=>a+x.amount,0);
-  if (paidTotal !== money(inv.total)) throw new Error('مجموع پرداخت‌ها باید دقیقاً برابر مبلغ فاکتور باشد');
-  const accountPay = normalized.filter(x=>x.method==='ACCOUNT').reduce((a,x)=>a+x.amount,0);
-  if (accountPay > 0 && !inv.customer_id) throw new Error('برای فروش اعتباری باید مشتری انتخاب شود');
-
-  return withTransaction(() => {
-    for (const item of items) {
-      const p = rows("SELECT stock FROM products WHERE id=? AND active=1",[item.product_id])[0];
-      if (!p || ledgerStock(item.product_id) < Number(item.quantity)) throw new Error(`موجودی ${item.product_name} کافی نیست`);
-    }
-    const now = new Date().toISOString();
-    const reg = rows("SELECT * FROM cash_registers WHERE status='OPEN' ORDER BY opened_at DESC LIMIT 1")[0];
-    if (!reg && normalized.some(x=>x.method==='CASH')) throw new Error('برای دریافت نقدی ابتدا صندوق را باز کنید');
-    for (const item of items) {
-      const saleCost = movementCost(item.product_id, 'SALE', item.quantity, movingAverageCost(item.product_id));
-      const movementId = newId('mov');
-      db.run("INSERT INTO stock_movements(id,product_id,invoice_id,movement_type,quantity,unit_cost,total_cost,cost_method,created_at,note) VALUES(?,?,?,?,?,?,?,?,?,?)",
-        [movementId,item.product_id,invoiceId,'SALE',-Number(item.quantity),saleCost.unitCost,-saleCost.totalCost,'MOVING_AVERAGE',now,'فروش فاکتور']);
-      syncProductStockFromLedger(item.product_id, now);
-      queueSync('stock_movement', movementId);
-      queueSync('product', item.product_id);
-    }
-    db.run("UPDATE invoices SET status='PAID',payment_method=?,closed_at=?,updated_at=? WHERE id=? AND status='OPEN'",
-      [normalized.map(x=>x.method).join('+'),now,now,invoiceId]);
-    queueSync('invoice', invoiceId);
-    const journalLines=[];
-    for (const x of normalized) {
-      const paymentId = newId('pay');
-      db.run("INSERT INTO payments(id,invoice_id,method,amount,created_at) VALUES(?,?,?,?,?)",
-        [paymentId,invoiceId,x.method,x.amount,now]);
-      queueSync('payment', paymentId);
-      if (x.method==='ACCOUNT') { postCustomerLedger(inv.customer_id,'DEBIT',x.amount,'SALE_CREDIT','PAYMENT',paymentId,`فروش اعتباری فاکتور ${inv.invoice_no}`,now); journalLines.push({accountCode:'AR',accountName:'حساب‌های دریافتنی مشتریان',debit:x.amount,credit:0,note:`فاکتور ${inv.invoice_no}`}); }
-      if (x.method==='CASH') { insertCashMovement({registerId:reg.id,type:'SALE',amount:x.amount,direction:'IN',category:'SALE',note:`فروش فاکتور ${inv.invoice_no}`,referenceType:'INVOICE',referenceId:invoiceId,createdAt:now}); journalLines.push({accountCode:'CASH',accountName:'صندوق نقدی',debit:x.amount,credit:0,note:`فاکتور ${inv.invoice_no}`}); }
-      if (x.method==='CARD') journalLines.push({accountCode:'BANK',accountName:'بانک / کارتخوان',debit:x.amount,credit:0,note:`فاکتور ${inv.invoice_no}`});
-    }
-    journalLines.push({accountCode:'SALES',accountName:'فروش',debit:0,credit:money(inv.total),note:`فاکتور ${inv.invoice_no}`});
-    postJournalOnce('SALE','SALE',`فروش فاکتور ${inv.invoice_no}`,journalLines,'INVOICE',invoiceId,now);
-    // COGS must be calculated from ALL SALE movements created for this invoice.
-    // A product can be added/merged multiple times in one invoice; selecting only
-    // the latest movement would understate COGS in that case.
-    const saleCogs=money(Number(rows("SELECT COALESCE(-SUM(total_cost),0) v FROM stock_movements WHERE invoice_id=? AND movement_type='SALE'",[invoiceId])[0]?.v||0));
-    if(saleCogs>0) postJournalOnce('COGS_SALE','COGS_SALE',`بهای تمام‌شده فاکتور ${inv.invoice_no}`,[{accountCode:'COGS',accountName:'بهای تمام‌شده کالای فروش‌رفته',debit:saleCogs,credit:0,note:`فاکتور ${inv.invoice_no}`},{accountCode:'INVENTORY',accountName:'موجودی کالا',debit:0,credit:saleCogs,note:`فاکتور ${inv.invoice_no}`}],'INVOICE',invoiceId,now);
-    auditLog('SALE_COMPLETED','INVOICE',invoiceId,{invoiceNo:inv.invoice_no,total:inv.total,paymentMethods:normalized},'INVOICE',invoiceId,now);
-    return invoiceDetail(invoiceId);
-  });
-});
+ipcMain.handle('invoice:pay', (_e, payload) => salesCore.invoicePay(payload));
 
 ipcMain.handle('invoice:returns', (_e, invoiceId) => rows(`
   SELECT sr.*, ri.id item_return_id, ri.invoice_item_id, ri.product_id, ri.product_name, ri.quantity, ri.unit, ri.unit_price, ri.refund_amount

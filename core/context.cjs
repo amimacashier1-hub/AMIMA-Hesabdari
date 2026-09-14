@@ -49,9 +49,14 @@ function createCoreContext(deps) {
     insertCashMovement: deps.insertCashMovement || null,
     invoiceDetail: deps.invoiceDetail || null,
     ledgerStock: deps.ledgerStock || null,
+    movingAverageCost: deps.movingAverageCost || null,
+    movementCost: deps.movementCost || null,
+    syncProductStockFromLedger: deps.syncProductStockFromLedger || null,
     repriceInvoiceProduct: deps.repriceInvoiceProduct || null,
     recalcInvoice: deps.recalcInvoice || null,
-    assertFiniteNonNegative: deps.assertFiniteNonNegative || null
+    assertFiniteNonNegative: deps.assertFiniteNonNegative || null,
+    postCustomerLedger: deps.postCustomerLedger || null,
+    postJournalOnce: deps.postJournalOnce || null
   });
 }
 
