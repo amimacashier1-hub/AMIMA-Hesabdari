@@ -7,6 +7,8 @@ const http = require('http');
 const { createDashboardCore } = require('./core/dashboard.cjs');
 const { createCoreContext } = require('./core/context.cjs');
 const { createDashboardAdapter } = require('./core/dashboard-adapter.cjs');
+const { createReportsCore } = require('./core/reports.cjs');
+const { createReportsAdapter } = require('./core/reports-adapter.cjs');
 
 let db = null;
 let NativeDatabase = null;
@@ -918,6 +920,7 @@ function withTransaction(work) {
 // Business Core context bootstrap.
 // فعلاً فقط Context ساخته می‌شود؛ Handlerهای فعلی دست‌نخورده‌اند.
 let dashboardAdapter = null;
+let reportsAdapter = null;
 let dashboardCore = null;
 
 function createBusinessCoreContext() {
@@ -1965,25 +1968,8 @@ ipcMain.handle('accounting:trial-balance', () => rows(`SELECT account_code,accou
 ipcMain.handle('audit:list', (_e, {limit=500,entityType,entityId}={}) => { let q=`SELECT * FROM audit_log WHERE 1=1`, p=[]; if(entityType){q+=' AND entity_type=?';p.push(entityType)} if(entityId){q+=' AND entity_id=?';p.push(entityId)} q+=' ORDER BY created_at DESC,id DESC LIMIT ?';p.push(Math.min(1000,Math.max(1,Number(limit)||500))); return rows(q,p).map(x=>({...x,details:x.details_json?JSON.parse(x.details_json):null})); });
 ipcMain.handle('audit:summary', () => rows(`SELECT action,entity_type,COUNT(*) count,MAX(created_at) last_at FROM audit_log GROUP BY action,entity_type ORDER BY last_at DESC`));
 
-ipcMain.handle('reports:summary', () => {
-  const day = localDateKey();
-  const month = localMonthKey();
-  const today = rows("SELECT COALESCE(SUM(total),0) sales, COUNT(*) invoices FROM invoices WHERE status IN ('PAID','PARTIALLY_RETURNED','RETURNED') AND date(closed_at,'localtime')=?",[day])[0];
-  const m = rows("SELECT COALESCE(SUM(total),0) sales, COUNT(*) invoices FROM invoices WHERE status IN ('PAID','PARTIALLY_RETURNED','RETURNED') AND strftime('%Y-%m',closed_at,'localtime')=?",[month])[0];
-  const salesToday=Number(rows("SELECT COALESCE(SUM(total),0) v FROM invoices WHERE status IN ('PAID','PARTIALLY_RETURNED','RETURNED') AND date(closed_at,'localtime')=?",[day])[0]?.v||0);
-  const returnsToday=Number(rows("SELECT COALESCE(SUM(refund_total),0) v FROM sales_returns WHERE date(created_at,'localtime')=?",[day])[0]?.v||0);
-  const cogsToday=Number(rows("SELECT COALESCE(-SUM(total_cost),0) v FROM stock_movements WHERE movement_type='SALE' AND date(created_at,'localtime')=?",[day])[0]?.v||0);
-  const returnCogsToday=Number(rows("SELECT COALESCE(SUM(total_cost),0) v FROM stock_movements WHERE movement_type='RETURN_IN' AND invoice_id IS NOT NULL AND date(created_at,'localtime')=?",[day])[0]?.v||0);
-  const netSales=money(salesToday-returnsToday);
-  const netCogs=money(cogsToday-returnCogsToday);
-  const profit={salesGross:money(salesToday),returns:money(returnsToday),salesNet:netSales,cogs:netCogs,profit:money(netSales-netCogs)};
-  const best = rows(`SELECT product_name, unit, SUM(quantity) quantity, SUM(amount) amount FROM invoice_items ii JOIN invoices i ON i.id=ii.invoice_id WHERE i.status IN ('PAID','PARTIALLY_RETURNED','RETURNED') AND strftime('%Y-%m',i.closed_at,'localtime')=? GROUP BY product_id,product_name,unit ORDER BY quantity DESC LIMIT 10`,[month]);
-  const payments = rows("SELECT method, COALESCE(SUM(amount),0) amount, COUNT(*) count FROM payments p JOIN invoices i ON i.id=p.invoice_id WHERE i.status IN ('PAID','PARTIALLY_RETURNED','RETURNED') AND date(i.closed_at,'localtime')=? GROUP BY method ORDER BY amount DESC",[day]);
-  const stockValue=rows("SELECT COALESCE(SUM(v.value),0) value FROM (SELECT product_id,COALESCE(SUM(total_cost),0) value FROM stock_movements GROUP BY product_id HAVING COALESCE(SUM(quantity),0)>0) v")[0];
-  return {today,month:m,profit,best,payments,stockValue,valuationMethod:'MOVING_AVERAGE'};
-});
-
-ipcMain.handle('reports:recent', () => rows("SELECT id,invoice_no,total,payment_method,closed_at FROM invoices WHERE status='PAID' ORDER BY closed_at DESC LIMIT 50"));
+ipcMain.handle('reports:summary', () => reportsAdapter.getSummary());
+ipcMain.handle('reports:recent', () => reportsAdapter.getRecent());
 
 ipcMain.handle('backup:settings', () => backupSettings());
 ipcMain.handle('backup:set-settings', (_e, {enabled, intervalHours}) => {
@@ -2128,7 +2114,9 @@ function createWindow() {
   win.loadFile(path.join(__dirname,'src','index.html'));
 }
 
-app.whenReady().then(async()=>{ await initDatabase(); dashboardCore = createDashboardCore(createBusinessCoreContext()); dashboardAdapter = createDashboardAdapter(dashboardCore); await createAutomaticBackup(); startAutoBackupTimer(); createWindow(); }).catch(err=>{
+app.whenReady().then(async()=>{ await initDatabase(); dashboardCore = createDashboardCore(createBusinessCoreContext()); dashboardAdapter = createDashboardAdapter(dashboardCore);
+  const reportsCore = createReportsCore(createBusinessCoreContext());
+  reportsAdapter = createReportsAdapter(reportsCore); await createAutomaticBackup(); startAutoBackupTimer(); createWindow(); }).catch(err=>{
   try {
     const logDir = app.getPath('userData');
     fs.mkdirSync(logDir,{recursive:true});
