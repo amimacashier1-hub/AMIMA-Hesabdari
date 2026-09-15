@@ -293,9 +293,7 @@ button:hover{
 
 /* COMMON CARDS */
 
-.card,
-.quick,
-.cart{
+.card{
   margin-bottom:18px;
   padding:19px;
   border:1px solid var(--border);
@@ -659,27 +657,6 @@ tr:hover td{
   width:100%;
 }
 
-.sale-layout{
-  display:grid;
-  grid-template-columns:minmax(0,1.55fr) minmax(320px,.75fr);
-  gap:18px;
-  align-items:start;
-}
-
-.quick{
-  position:relative;
-}
-
-.quick-title{
-  display:flex;
-  align-items:center;
-  margin-bottom:14px;
-}
-
-.quick-title>div{
-  margin-left:auto;
-}
-
 .kbd{
   padding:4px 7px;
   border:1px solid var(--border);
@@ -688,13 +665,6 @@ tr:hover td{
   background:#fff;
   color:var(--muted);
   font-size:9px;
-}
-
-.quick-grid{
-  display:grid;
-  grid-template-columns:minmax(230px,2fr) .7fr .7fr .9fr auto;
-  gap:8px;
-  align-items:end;
 }
 
 .field-wrap label{
@@ -738,21 +708,6 @@ tr:hover td{
   margin-top:3px;
   color:var(--muted);
   font-size:9px;
-}
-
-.cart{
-  position:sticky;
-  top:95px;
-  height:max-content;
-}
-
-.cart-head{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  padding-bottom:13px;
-  border-bottom:1px solid var(--border);
-  font-weight:700;
 }
 
 .live{
@@ -991,16 +946,6 @@ tr:hover td{
     grid-template-columns:repeat(2,minmax(0,1fr));
   }
 
-  .grid2,
-  .grid3,
-  .sale-layout{
-    grid-template-columns:1fr;
-  }
-
-  .cart{
-    position:relative;
-    top:auto;
-  }
 }
 
 @media (max-width:650px){
@@ -1088,9 +1033,7 @@ tr:hover td{
     height:29px;
   }
 
-  .card,
-  .quick,
-  .cart{
+  .card{
     padding:13px;
     margin-bottom:10px;
     border-radius:11px;
@@ -1113,14 +1056,6 @@ tr:hover td{
   .action-bar input{
     max-width:none;
     margin-bottom:8px;
-  }
-
-  .quick-grid{
-    grid-template-columns:1fr 1fr;
-  }
-
-  .quick-grid .field-wrap:first-child{
-    grid-column:1/-1;
   }
 
   .add-btn{
@@ -1799,3 +1734,266 @@ tr:hover td{
   }
 }
 
+
+/* =========================================================
+   AMIMA V1 — POS / CASHIER UI
+   Presentation only — business logic untouched
+   ========================================================= */
+
+.pos-shell{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 360px;
+  gap:16px;
+  height:calc(100vh - 150px);
+  min-height:0;
+}
+
+.pos-workspace{
+  display:grid;
+  grid-template-rows:auto minmax(0,1fr);
+  gap:14px;
+  min-width:0;
+  min-height:0;
+}
+
+.pos-quick{
+  position:relative;
+  padding:16px;
+  min-height:0;
+}
+
+.pos-section-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:14px;
+}
+
+.pos-section-head.compact{
+  margin-bottom:10px;
+}
+
+.pos-section-head h2{
+  margin:3px 0 0;
+  font-size:18px;
+}
+
+.pos-section-head .eyebrow,
+.pos-checkout-head .eyebrow{
+  font-size:11px;
+  font-weight:800;
+  color:var(--primary,#2563eb);
+}
+
+.pos-entry-grid{
+  display:grid;
+  grid-template-columns:minmax(230px,2fr) .8fr .8fr 1fr auto;
+  gap:10px;
+  align-items:end;
+}
+
+.pos-entry-grid .field-wrap{
+  min-width:0;
+}
+
+.pos-product-field input{
+  font-weight:600;
+}
+
+.pos-entry-grid .add-btn{
+  min-height:44px;
+  white-space:nowrap;
+}
+
+.pos-items-card{
+  min-height:0;
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+}
+
+.pos-table{
+  min-height:0;
+  overflow:hidden;
+}
+
+.pos-table table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+.pos-table thead th{
+  height:38px;
+  white-space:nowrap;
+}
+
+.pos-table tbody td{
+  height:46px;
+  white-space:nowrap;
+}
+
+.items-count{
+  font-size:12px;
+  font-weight:800;
+  color:#64748b;
+  background:#f1f5f9;
+  border-radius:999px;
+  padding:6px 10px;
+}
+
+.pos-checkout{
+  background:#fff;
+  border:1px solid #e2e8f0;
+  border-radius:18px;
+  box-shadow:0 10px 30px rgba(15,23,42,.08);
+  padding:18px;
+  min-height:0;
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+}
+
+.pos-checkout-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom:14px;
+}
+
+.pos-checkout-head h2{
+  margin:3px 0 0;
+  font-size:18px;
+}
+
+.pos-total-box{
+  background:#eff6ff;
+  border:1px solid #bfdbfe;
+  border-radius:16px;
+  padding:16px;
+  margin-bottom:14px;
+  text-align:right;
+}
+
+.pos-total-box span{
+  display:block;
+  font-size:12px;
+  font-weight:700;
+  color:#475569;
+}
+
+.pos-total-box strong{
+  display:block;
+  color:#2563eb;
+  font-size:30px;
+  line-height:1.2;
+  margin:5px 0 2px;
+}
+
+.pos-total-box small{
+  color:#64748b;
+  font-weight:700;
+}
+
+.pos-summary{
+  display:grid;
+  gap:8px;
+  padding-bottom:12px;
+  border-bottom:1px solid #e2e8f0;
+  margin-bottom:12px;
+}
+
+.pos-summary .summary-line{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+
+.pos-summary .summary-line input{
+  width:90px;
+  height:36px;
+}
+
+.pos-payment-grid{
+  display:grid !important;
+  grid-template-columns:repeat(3,1fr);
+  gap:7px;
+}
+
+.pos-payment-grid button{
+  min-height:42px;
+  font-weight:800;
+  border:1px solid #dbe4ef;
+  background:#f8fafc;
+  border-radius:10px;
+}
+
+.pos-payment-grid button.selected{
+  background:#eff6ff;
+  border-color:#60a5fa;
+  color:#2563eb;
+}
+
+.pos-final-actions{
+  display:grid;
+  grid-template-columns:1fr 1.25fr;
+  gap:8px;
+  margin-top:auto;
+  padding-top:12px;
+}
+
+.pos-final-actions button{
+  min-height:44px;
+}
+
+.pos-cancel{
+  margin-top:8px;
+  min-height:38px;
+}
+
+#saleArea .suggestions{
+  max-height:none;
+  overflow:hidden;
+}
+
+@media (max-width:1100px){
+  .pos-shell{
+    grid-template-columns:minmax(0,1fr) 320px;
+    gap:12px;
+  }
+
+  .pos-entry-grid{
+    grid-template-columns:2fr 1fr 1fr 1fr;
+  }
+
+  .pos-entry-grid .add-btn{
+    grid-column:1/-1;
+  }
+}
+
+@media (max-height:760px){
+  .pos-shell{
+    height:calc(100vh - 138px);
+  }
+
+  .pos-quick{
+    padding:12px;
+  }
+
+  .pos-checkout{
+    padding:14px;
+  }
+
+  .pos-total-box{
+    padding:11px;
+  }
+
+  .pos-total-box strong{
+    font-size:25px;
+  }
+
+  .pos-table tbody td{
+    height:40px;
+  }
+}

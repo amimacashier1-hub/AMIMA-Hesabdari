@@ -14,7 +14,87 @@ async function renderSale(){
   const i=currentInvoice;
   const discountPct=i.subtotal>0?((Number(i.discount||0)/Number(i.subtotal))*100):0;
   selectedPaymentMethod=null;
-  $('saleArea').innerHTML=`<div class="sale-layout"><div><div class="quick"><div class="quick-title"><div><h2>افزودن سریع کالا</h2><p>با Enter بین فیلدها جابه‌جا شوید؛ با ↑ و ↓ کالا را انتخاب کنید.</p></div><span class="kbd">ENTER</span></div><div class="quick-grid"><div class="field-wrap"><label>جستجوی کالا</label><input id="qName" placeholder="مثلاً گل گاوزبان" autocomplete="off"></div><div class="field-wrap"><label>مقدار</label><input id="qQty" type="number" step="0.1" min="0.1" placeholder="100"></div><div class="field-wrap"><label>واحد</label><input id="qUnit" value="—" readonly></div><div class="field-wrap"><label>قیمت فروش (تومان)</label><input id="qPrice" value="—" type="number" min="0" step="1"></div><button class="primary add-btn" id="addQuickBtn" onclick="addQuick()">افزودن به فاکتور</button></div><div id="suggestions" class="suggestions hidden"></div><div id="tierHint" class="tier-hint">ابتدا کالا و مقدار را وارد کنید.</div></div><div class="card"><div class="card-title"><div><h2>اقلام فاکتور ${fmt(i.invoice_no)}</h2><p>${i.items.length} قلم</p></div></div><div class="table-wrap"><table><thead><tr><th>کالا</th><th>مقدار</th><th>قیمت/واحد</th><th>مبلغ</th><th></th></tr></thead><tbody>${i.items.length?i.items.map(x=>`<tr><td><b>${esc(x.product_name)}</b></td><td>${fmt(x.quantity)} ${esc(x.unit)}</td><td>${fmt(x.unit_price)}</td><td><b>${fmt(x.amount)}</b></td><td><button class="danger" onclick="removeItem('${x.id}')">حذف</button></td></tr>`).join(''):'<tr><td colspan="5" class="empty-cell">کالایی اضافه نشده است.</td></tr>'}</tbody></table></div></div></div><div class="cart"><div class="cart-head"><span>فاکتور ${fmt(i.invoice_no)}</span><span class="live">● باز</span></div><div class="summary-line"><span>جمع</span><b>${fmt(i.subtotal)} تومان</b></div><div class="summary-line"><span>تخفیف (%)</span><input id="discount" type="number" min="0" max="100" step="0.01" value="${discountPct.toFixed(2)}"></div><div class="summary-line final"><span>مبلغ نهایی</span><b>${fmt(i.total)} تومان</b></div><div class="pay-label">مشتری (اختیاری)</div><div class="payrow"><select id="customerSelect" onchange="setCustomer(this.value)" style="width:100%"><option value="">مشتری متفرقه</option></select></div><div class="pay-label">روش پرداخت</div><div class="payrow payment-methods"><button id="payCashBtn" onclick="selectPayment('CASH')">نقدی</button><button id="payCardBtn" onclick="selectPayment('CARD')">کارت / اعتباری</button><button id="payAccountBtn" onclick="selectPayment('ACCOUNT')">نسیه</button></div><div id="paymentHint" class="tier-hint">یک روش پرداخت را انتخاب کنید.</div><div class="payrow"><button id="finalNoPrint" class="primary" disabled onclick="confirmPayment(false)">ثبت نهایی بدون چاپ رسید</button><button id="finalPrint" class="primary" disabled onclick="confirmPayment(true)">ثبت نهایی و چاپ رسید</button></div><button class="ghost" onclick="cancelCurrentInvoice()">لغو فاکتور باز</button></div></div>`;
+  $('saleArea').innerHTML=`
+    <div class="pos-shell">
+      <section class="pos-workspace">
+        <div class="pos-quick card">
+          <div class="pos-section-head">
+            <div><div class="eyebrow">افزودن سریع کالا</div><h2>انتخاب کالا برای فاکتور</h2></div>
+            <span class="kbd">ENTER</span>
+          </div>
+          <div class="pos-entry-grid">
+            <div class="field-wrap pos-product-field"><label>جستجوی کالا</label><input id="qName" placeholder="نام کالا یا بارکد..." autocomplete="off"></div>
+            <div class="field-wrap"><label>مقدار</label><input id="qQty" type="number" step="0.1" min="0.1" placeholder="100"></div>
+            <div class="field-wrap"><label>واحد</label><input id="qUnit" value="—" readonly></div>
+            <div class="field-wrap"><label>قیمت فروش</label><input id="qPrice" value="—" type="number" min="0" step="1"></div>
+            <button class="primary add-btn" id="addQuickBtn" onclick="addQuick()">افزودن به فاکتور</button>
+          </div>
+          <div id="suggestions" class="suggestions hidden"></div>
+          <div id="tierHint" class="tier-hint">ابتدا کالا و مقدار را وارد کنید.</div>
+        </div>
+
+        <div class="pos-items-card card">
+          <div class="pos-section-head compact">
+            <div><div class="eyebrow">اقلام فاکتور</div><h2>فاکتور ${fmt(i.invoice_no)}</h2></div>
+            <span class="items-count">${i.items.length} قلم</span>
+          </div>
+          <div class="pos-table">
+            <table>
+              <thead>
+                <tr><th>کالا</th><th>مقدار</th><th>قیمت / واحد</th><th>مبلغ</th><th></th></tr>
+              </thead>
+              <tbody>${
+                i.items.length
+                ? i.items.map(x=>`<tr><td><b>${esc(x.product_name)}</b></td><td>${fmt(x.quantity)} ${esc(x.unit)}</td><td>${fmt(x.unit_price)}</td><td><b>${fmt(x.amount)}</b></td><td><button class="danger" onclick="removeItem('${x.id}')">حذف</button></td></tr>`).join('')
+                : '<tr><td colspan="5" class="empty-cell">کالایی به این فاکتور اضافه نشده است.</td></tr>'
+              }</tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <aside class="pos-checkout">
+        <div class="pos-checkout-head">
+          <div><div class="eyebrow">صندوق</div><h2>فاکتور ${fmt(i.invoice_no)}</h2></div>
+          <span class="live">● باز</span>
+        </div>
+
+        <div class="pos-total-box">
+          <span>مبلغ نهایی</span>
+          <strong>${fmt(i.total)}</strong>
+          <small>تومان</small>
+        </div>
+
+        <div class="pos-summary">
+          <div class="summary-line"><span>جمع کالاها</span><b>${fmt(i.subtotal)} تومان</b></div>
+          <div class="summary-line"><span>تخفیف</span><input id="discount" type="number" min="0" max="100" step="0.01" value="${discountPct.toFixed(2)}"></div>
+        </div>
+
+        <div class="pay-label">مشتری</div>
+        <div class="payrow">
+          <select id="customerSelect" onchange="setCustomer(this.value)" style="width:100%">
+            <option value="">مشتری متفرقه</option>
+          </select>
+        </div>
+
+        <div class="pay-label">روش پرداخت</div>
+        <div class="payment-methods pos-payment-grid">
+          <button id="payCashBtn" onclick="selectPayment('CASH')">نقدی</button>
+          <button id="payCardBtn" onclick="selectPayment('CARD')">کارت / اعتباری</button>
+          <button id="payAccountBtn" onclick="selectPayment('ACCOUNT')">نسیه</button>
+        </div>
+
+        <div id="paymentHint" class="tier-hint">یک روش پرداخت را انتخاب کنید.</div>
+
+        <div class="pos-final-actions">
+          <button id="finalNoPrint" class="primary" disabled onclick="confirmPayment(false)">ثبت نهایی</button>
+          <button id="finalPrint" class="primary" disabled onclick="confirmPayment(true)">ثبت نهایی و چاپ رسید</button>
+        </div>
+
+        <button class="ghost pos-cancel" onclick="cancelCurrentInvoice()">لغو فاکتور باز</button>
+      </aside>
+    </div>
+  `;
   setupQuick();
   loadCustomersForInvoice();
   setupSaleKeyboard();
@@ -23,7 +103,7 @@ async function renderSale(){
 }
 
 function suggestionItems(){return [...document.querySelectorAll('#suggestions .suggestion-item')]}
-function highlightSuggestion(index){const items=suggestionItems();if(!items.length){suggestionIndex=-1;return}suggestionIndex=Math.max(0,Math.min(index,items.length-1));items.forEach((el,i)=>el.classList.toggle('active',i===suggestionIndex));items[suggestionIndex]?.scrollIntoView({block:'nearest'});}
+function highlightSuggestion(index){const items=suggestionItems();if(!items.length){suggestionIndex=-1;return}suggestionIndex=Math.max(0,Math.min(index,items.length-1));items.forEach((el,i)=>el.classList.toggle('active',i===suggestionIndex));}
 async function chooseSuggestion(){const items=suggestionItems();if(!items.length)return false;const idx=suggestionIndex>=0?suggestionIndex:0;const id=items[idx]?.dataset.productId;if(!id)return false;const p=(await window.hesabdari.products.search($('qName').value)).find(x=>x.id===id);if(!p)return false;await selectProduct(p.id,p.name);return true}
 async function setupQuick(){
   const name=$('qName'),qty=$('qQty'),price=$('qPrice'),s=$('suggestions');
@@ -54,7 +134,7 @@ function setupSaleKeyboard(){
   noPrint?.addEventListener('keydown',e=>{if(e.key==='ArrowDown'||e.key==='ArrowRight'){e.preventDefault();print?.focus()}else if(e.key==='Enter'){e.preventDefault();confirmPayment(false)}});
   print?.addEventListener('keydown',e=>{if(e.key==='ArrowLeft'||e.key==='ArrowUp'){e.preventDefault();noPrint?.focus()}else if(e.key==='Enter'){e.preventDefault();confirmPayment(true)}});
 }
-async function openPayment(){if(!currentInvoice?.items?.length)return toast('فاکتور خالی است');document.querySelector('#paymentHint')?.scrollIntoView({block:'nearest'});selectPayment(selectedPaymentMethod||'CASH',true)}
+async function openPayment(){if(!currentInvoice?.items?.length)return toast('فاکتور خالی است');selectPayment(selectedPaymentMethod||'CASH',true)}
 async function confirmPayment(printReceipt=false){if(!selectedPaymentMethod)return toast('ابتدا روش پرداخت را انتخاب کنید');try{const paid=await window.hesabdari.invoices.pay({invoiceId:currentInvoice.id,payments:[{method:selectedPaymentMethod,amount:Math.round(Number(currentInvoice.total)||0)}]});toast('فروش با موفقیت ثبت شد');if(printReceipt){try{await window.hesabdari.receipt.print(paid.id)}catch(e){toast('فروش ثبت شد؛ چاپ رسید انجام نشد')}}currentInvoice=null;go('sales')}catch(e){toast(e.message)}}
 async function pay(method){selectPayment(method||'CASH')}
 async function loadProducts(){products=await window.hesabdari.products.list()}
