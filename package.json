@@ -26,7 +26,7 @@
     "productName": "Hesabdari",
     "asar": true,
     "directories": { "output": "dist-desktop" },
-    "files": ["main.cjs", "preload.cjs", "src/**/*", "assets/**/*", "package.json"],
+    "files": ["main.cjs", "preload.cjs", "src/**/*", "core/**/*", "assets/**/*", "package.json"],
     "extraResources": [{ "from": "assets/fonts", "to": "fonts" }],
     "win": {
       "target": [{ "target": "nsis", "arch": ["ia32"] }],
