@@ -13,10 +13,95 @@ e html>
 </header>
 <main>
 <section id="page-dashboard" class="page">
-  <div class="page-head"><div><div class="eyebrow">صندوق آفلاین فروشگاه</div><h1>پیشخوان</h1><p>نمای کلی فروش و موجودی</p></div><button class="primary" onclick="go('sales')">+ فروش جدید</button></div>
-  <div class="stats"><div class="stat"><div class="stat-icon">▣</div><span>فروش امروز</span><strong id="todaySales">۰</strong><em>تومان</em></div><div class="stat"><div class="stat-icon">#</div><span>فاکتور امروز</span><strong id="todayInvoices">۰</strong><em>فاکتور</em></div><div class="stat"><div class="stat-icon">↗</div><span>فروش این ماه</span><strong id="monthSales">۰</strong><em>تومان</em></div><div class="stat"><div class="stat-icon">◈</div><span>سود تقریبی امروز</span><strong id="todayProfit">۰</strong><em>تومان</em></div></div>
-  <div class="grid2"><div class="card"><div class="card-title"><div><h2>پرفروش‌ترین‌های ماه</h2><p>بر اساس مقدار فروش</p></div><span class="badge">۵ کالای برتر</span></div><div id="bestSellers" class="best-list"></div></div><div class="card"><div class="card-title"><div><h2>فاکتورهای باز</h2><p>فاکتورهایی که هنوز ثبت نهایی نشده‌اند</p></div><button class="ghost" onclick="newInvoice()">+ فاکتور</button></div><div id="openInvoices" class="invoice-tabs vertical"></div></div></div>
-  <div class="card"><div class="card-title"><div><h2>هشدار موجودی</h2><p>کالاهای نزدیک حداقل موجودی</p></div></div><div id="lowStock" class="table-wrap"></div></div>
+  <div class="page-head dashboard-head">
+    <div>
+      <div class="eyebrow">صندوق آفلاین فروشگاه</div>
+      <h1>پیشخوان</h1>
+      <p>نمای کلی فروش، فاکتورها و وضعیت موجودی</p>
+    </div>
+    <button class="primary dashboard-sale-btn" onclick="go('sales')">+ فروش جدید</button>
+  </div>
+
+  <div class="stats dashboard-stats">
+
+    <div class="stat dashboard-stat sales-stat">
+      <div class="stat-top">
+        <span>فروش امروز</span>
+        <div class="stat-icon">▣</div>
+      </div>
+      <strong id="todaySales">۰</strong>
+      <em>تومان</em>
+    </div>
+
+    <div class="stat dashboard-stat invoice-stat">
+      <div class="stat-top">
+        <span>فاکتور امروز</span>
+        <div class="stat-icon">#</div>
+      </div>
+      <strong id="todayInvoices">۰</strong>
+      <em>فاکتور</em>
+    </div>
+
+    <div class="stat dashboard-stat month-stat">
+      <div class="stat-top">
+        <span>فروش این ماه</span>
+        <div class="stat-icon">↗</div>
+      </div>
+      <strong id="monthSales">۰</strong>
+      <em>تومان</em>
+    </div>
+
+    <div class="stat dashboard-stat profit-stat">
+      <div class="stat-top">
+        <span>سود تقریبی امروز</span>
+        <div class="stat-icon">◈</div>
+      </div>
+      <strong id="todayProfit">۰</strong>
+      <em>تومان</em>
+    </div>
+
+  </div>
+
+  <div class="dashboard-main-grid">
+
+    <div class="card dashboard-card best-card">
+      <div class="card-title dashboard-card-title">
+        <div>
+          <h2>پرفروش‌ترین‌های ماه</h2>
+          <p>بر اساس مقدار فروش</p>
+        </div>
+        <span class="badge">۵ کالای برتر</span>
+      </div>
+
+      <div id="bestSellers" class="best-list"></div>
+    </div>
+
+    <div class="card dashboard-card invoices-card">
+      <div class="card-title dashboard-card-title">
+        <div>
+          <h2>فاکتورهای باز</h2>
+          <p>فاکتورهایی که هنوز ثبت نهایی نشده‌اند</p>
+        </div>
+        <button class="ghost" onclick="newInvoice()">+ فاکتور</button>
+      </div>
+
+      <div id="openInvoices" class="invoice-tabs vertical"></div>
+    </div>
+
+  </div>
+
+  <div class="card dashboard-card low-stock-card">
+    <div class="card-title dashboard-card-title">
+      <div>
+        <h2>هشدار موجودی</h2>
+        <p>کالاهای نزدیک حداقل موجودی</p>
+      </div>
+      <span class="status-pill warning">نیازمند بررسی</span>
+    </div>
+
+    <div id="lowStock" class="table-wrap"></div>
+  </div>
+
 </section>
 <section id="page-sales" class="page hidden">
   <div class="page-head sales-head"><div><div class="eyebrow">فروش وزنی و بسته‌ای</div><h1>صندوق فروش</h1><p>چند فاکتور را همزمان باز نگه دارید.</p></div><div class="sale-actions"><div class="invoice-tabs top" id="saleTabs"></div><button class="primary" onclick="newInvoice()">+ فاکتور جدید</button></div></div>
